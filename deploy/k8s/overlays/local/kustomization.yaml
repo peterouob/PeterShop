@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+images:
+  - name: seckill/api-gateway
+    newTag: local
+  - name: seckill/user-service
+    newTag: local
+  - name: seckill/seckill-service
+    newTag: local
+
+replicas:
+  - name: api-gateway
+    count: 1
+  - name: user-service
+    count: 1
+  - name: seckill-service
+    count: 1
+
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+
+secretGenerator:
+  - name: credentials
+    behavior: replace
+    literals:
+      - MYSQL_PASSWORD=password
+      - JWT_SECRET=local-development-secret
+
+configMapGenerator:
+  - name: infra
+    behavior: merge
+    literals:
+      - MYSQL_USER=root

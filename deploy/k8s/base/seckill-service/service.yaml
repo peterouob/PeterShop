@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: seckill-service
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: seckill-service
+  ports:
+    - name: grpc
+      port: 50052
+      targetPort: grpc
+      protocol: TCP

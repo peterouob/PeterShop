@@ -100,7 +100,7 @@ services:
     user: root
     volumes:
       - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
-      - ../app_logs:/usr/share/filebeat/logs:ro
+      - ../../app_logs:/usr/share/filebeat/logs:ro
     networks:
       - my_bridge
     depends_on:
@@ -141,18 +141,26 @@ services:
     networks:
       - my_bridge
   user-service:
+    profiles: ["services"]
     build:
-      context: ../
-      dockerfile: services/user-service/Dockerfile
+      context: ../../
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        TARGET: service/user-service/cmd
     container_name: user-service
     ports:
-      - "8083:8083"
-      - "50050:50050"
+      - "50051:50051"
     environment:
-      - SERVICE_IP=user-service
-      - DB_DSN=root:password@tcp(db:3306)/seckill?charset=utf8mb4&parseTime=True&loc=Local
+      - GRPC_ADDR=:50051
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=seckill
       - REDIS_ADDR=redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - ETCD_ENDPOINTS=etcd:2379
+      - JWT_SECRET=change-me-in-production
     networks:
       - my_bridge
     depends_on:

@@ -10,3 +10,11 @@ gen
 /app_logs
 app_logs!/app_logs/1.log
 /default.etcd/
+
+.env
+app_logs/
+
+/deploy/k8s/base/shared/credentials.properties
+PLAN.md
+
+/docs
