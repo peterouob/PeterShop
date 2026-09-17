@@ -1,3 +1,11 @@
+# TODO
+- [ ] full chain on the sec-kill(include Idempotence)
+- [ ] rate limit
+- [ ] TCC
+- [ ] roll back and compensate
+- [ ] chaos and k6/jmeter
+- [ ] LGTM(Loki,Grafana,Tempo,Mimir)
+
 ### How to run
 
 ## Step1. Build the env
