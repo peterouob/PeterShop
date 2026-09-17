@@ -17,15 +17,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	basePath := filepath.Join("services", *serviceName+"-service")
+	basePath := filepath.Join("service", *serviceName+"-service")
 	dirs := []string{
 		"cmd",
-		"internal/domain",
+		"internal/model",
 		"internal/service",
-		"internal/infrastructure/events",
-		"internal/infrastructure/grpc",
-		"internal/infrastructure/repository",
-		"pkg/types",
+		"internal/repository",
+		filepath.Join("internal", *serviceName+"grpc"),
 	}
 
 	for _, dir := range dirs {
@@ -36,62 +34,42 @@ func main() {
 		}
 	}
 
-	readmePath := filepath.Join(basePath, "README.md")
+	layout := fmt.Sprintf(`service/%s-service/
+├── cmd/
+│   └── main.go          # entrypoint: fx wiring for this service only
+└── internal/            # private to this service, never imported by others
+    ├── model/           # domain types and DTOs
+    ├── service/         # business logic (use cases)
+    ├── repository/      # persistence: MySQL, Redis, Lua scripts
+    └── %sgrpc/          # gRPC handler: proto <-> domain, error -> status code
+`, *serviceName, *serviceName)
+
 	readmeContent := fmt.Sprintf(`# %s service
 
 This service handles all %s-related operations in the system.
 
-## Architecture
-
-The service follows Clean Architecture principles with the following structure:
+## Layout
 
 `+"```"+`
-services/%s-service/
-├── cmd/                    # Application entry points
-│   └── main.go            # Main application setup
-├── internal/              # Private application code
-│   ├── domain/           # Business domain models and interfaces
-│   ├── service/          # Business logic implementation
-│   │   └── service.go    # Service implementations
-│   └── infrastructure/   # External dependencies implementations (abstractions)
-│       ├── events/       # Event handling (RabbitMQ)
-│       ├── grpc/         # gRPC server handlers
-│       └── repository/   # Data persistence
-├── pkg/                  # Public packages
-│   └── types/           # Shared types and models
-└── README.md            # This file
-`+"```"+`
+%s`+"```"+`
 
-### Layer Responsibilities
+## Rules
 
-1. **Domain Layer** (`+"`internal/domain/`"+`)
-   - Contains business domain interfaces
-   - Defines contracts for repositories and services
-   - Pure business logic, no implementation details
+1. **One process, one service.** `+"`cmd/main.go`"+` composes only this service's
+   fx module plus shared modules from the repo root `+"`pkg/`"+`.
+2. **No cross-service imports.** Services talk to each other over gRPC using the
+   generated clients in `+"`api/`"+`, never by importing another service's package.
+   `+"`internal/`"+` is enforced by the Go toolchain.
+3. **Dependencies point inward.** `+"`%sgrpc`"+` depends on `+"`service`"+`,
+   `+"`service`"+` depends on the `+"`repository`"+` interface it declares.
+   Nothing in `+"`service`"+` imports gRPC or gorm types.
+4. **One package per layer, not one directory per noun.** Add a package only when
+   it is a replaceable boundary you can test on its own.
+5. **Shared code goes to the repo root `+"`pkg/`"+`**, and only once a second
+   service actually needs it.
+`, *serviceName, *serviceName, layout, *serviceName)
 
-2. **Service Layer** (`+"`internal/service/`"+`)
-   - Implements business logic
-   - Uses repository interfaces
-   - Coordinates between different parts of the system
-
-3. **Infrastructure Layer** (`+"`internal/infrastructure/`"+`)
-   - `+"`repository/`"+`: Implements data persistence
-   - `+"`events/`"+`: Handles event publishing and consuming
-   - `+"`grpc/`"+`: Handles gRPC communication
-
-4. **Public Types** (`+"`pkg/types/`"+`)
-   - Contains shared types and models
-   - Can be imported by other services
-
-## Key Benefits
-
-1. **Dependency Inversion**: Services depend on interfaces, not implementations
-2. **Separation of Concerns**: Each layer has a specific responsibility
-3. **Testability**: Easy to mock dependencies for testing
-4. **Maintainability**: Clear boundaries between components
-5. **Flexibility**: Easy to swap implementations without affecting business logic
-`, *serviceName, *serviceName, *serviceName)
-
+	readmePath := filepath.Join(basePath, "README.md")
 	if err := os.WriteFile(readmePath, []byte(readmeContent), 0644); err != nil {
 		fmt.Printf("Error creating README.md: %v\n", err)
 		os.Exit(1)
@@ -99,20 +77,5 @@ services/%s-service/
 
 	fmt.Printf("Successfully created %s service structure in %s\n", *serviceName, basePath)
 	fmt.Println("\nDirectory structure created:")
-	fmt.Printf(`
-services/%s-service/
-├── cmd/                    # Application entry points
-├── internal/              # Private application code
-│   ├── domain/           # Business domain models and interfaces
-│   │   └── %s.go         # Core domain interfaces
-│   ├── service/          # Business logic implementation
-│   │   └── service.go    # Service implementations
-│   └── infrastructure/   # External dependencies implementations (abstractions)
-│       ├── events/       # Event handling (RabbitMQ)
-│       ├── grpc/         # gRPC server handlers
-│       └── repository/   # Data persistence
-├── pkg/                  # Public packages
-│   └── types/           # Shared types and models
-└── README.md            # This file
-`, *serviceName, *serviceName)
+	fmt.Println(layout)
 }

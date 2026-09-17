@@ -2,68 +2,78 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	etcdregister "github.com/peterouob/seckill_service/pkg/etcd"
-	"github.com/peterouob/seckill_service/service/seckill-service/internal/infrastructure/repository"
+	"github.com/peterouob/seckill_service/pkg/config"
+	"github.com/peterouob/seckill_service/service/seckill-service/internal/repository"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.uber.org/fx"
+)
+
+type deductResult int
+
+const (
+	deductSoldOut    deductResult = 0
+	deductSucceeded  deductResult = 1
+	deductDuplicated deductResult = 2
+	deductNotStarted deductResult = -1
 )
 
 type SeckillService interface {
-	Buy(ctx context.Context, userId, productId string) error
+	Buy(ctx context.Context, userID, productID string) error
 }
 
-type seckillServiceImpl struct {
+type seckillService struct {
 	repo    repository.SeckillRepo
 	session *concurrency.Session
 }
 
-func NewSeckillService(repo repository.SeckillRepo, etcd *etcdregister.EtcdRegister) SeckillService {
-	session, _ := concurrency.NewSession(etcd.Client.Client(), concurrency.WithTTL(5))
-	s := &seckillServiceImpl{
-		repo:    repo,
-		session: session,
-	}
-	return s
-}
-
-func (s *seckillServiceImpl) Buy(ctx context.Context, userId, productId string) error {
-	result, err := s.repo.DeductStock(ctx, productId, userId)
+func NewSeckillService(lc fx.Lifecycle, cfg *config.Config, repo repository.SeckillRepo, client *clientv3.Client) (SeckillService, error) {
+	session, err := concurrency.NewSession(client, concurrency.WithTTL(int(cfg.Etcd.LeaseTTL.Seconds())))
 	if err != nil {
-		return errors.New("error in Buy service")
+		return nil, fmt.Errorf("seckill: create etcd session: %w", err)
 	}
 
-	orderId := fmt.Sprintf("%s_%s", userId, productId)
-	switch result {
-	case 1:
-		s.reduceStock(ctx, userId, productId, orderId)
-		return nil
-	case 2:
-		return errors.New("您已經搶購過此商品了")
-	case 0:
-		return errors.New("沒貨了")
-	case -1:
-		return errors.New("活動尚未開始")
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error { return session.Close() },
+	})
+
+	return &seckillService{repo: repo, session: session}, nil
+}
+
+func (s *seckillService) Buy(ctx context.Context, userID, productID string) error {
+	result, err := s.repo.DeductStock(ctx, productID, userID)
+	if err != nil {
+		return fmt.Errorf("seckill: deduct stock for user %s on product %s: %w", userID, productID, err)
+	}
+
+	switch deductResult(result) {
+	case deductSucceeded:
+		return s.reduceStock(ctx, productID)
+	case deductDuplicated:
+		return ErrAlreadyBought
+	case deductSoldOut:
+		return ErrSoldOut
+	case deductNotStarted:
+		return ErrNotStarted
 	default:
-		return errors.New("error")
+		return fmt.Errorf("seckill: unexpected deduct result %d for product %s", result, productID)
 	}
 }
 
-// reduceStock TOOD:use etcd distributed lock to make sure only one can reduce for the truth stock in mysql
-func (s *seckillServiceImpl) reduceStock(ctx context.Context, userId, productId, orderId string) error {
-
-	pLock := fmt.Sprintf("/seckill/locks/%s", productId)
-	mutex := concurrency.NewMutex(s.session, pLock)
+func (s *seckillService) reduceStock(ctx context.Context, productID string) error {
+	mutex := concurrency.NewMutex(s.session, fmt.Sprintf("/seckill/locks/%s", productID))
 
 	if err := mutex.Lock(ctx); err != nil {
-		return fmt.Errorf("could not acquire lock for %s: %w", productId, err)
+		return fmt.Errorf("seckill: acquire lock for product %s: %w", productID, err)
 	}
-	defer mutex.Unlock(ctx)
+	defer func() {
+		_ = mutex.Unlock(context.WithoutCancel(ctx))
+	}()
 
-	if err := s.repo.ReduceStock(ctx, productId); err != nil {
-		return errors.New("error in reduce stock service")
+	if err := s.repo.ReduceStock(ctx, productID); err != nil {
+		return fmt.Errorf("seckill: reduce stock for product %s: %w", productID, err)
 	}
-
 	return nil
 }

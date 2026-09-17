@@ -3,43 +3,43 @@ package transport
 import (
 	"context"
 	"fmt"
+	"time"
 
-	etcdclient "github.com/peterouob/seckill_service/pkg/etcd/client"
-	"github.com/peterouob/seckill_service/pkg/logger"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 )
 
-func NewConn(
-	lc fx.Lifecycle,
-	hub *etcdclient.ServiceHub,
-	serviceName string,
-) (*grpc.ClientConn, error) {
-
-	endpoints := hub.GetServiceEndPoint(serviceName)
-	if len(endpoints) == 0 {
-		return nil, fmt.Errorf("no endpoint found for service: %s", serviceName)
+func NewConn(lc fx.Lifecycle, target string) (*grpc.ClientConn, error) {
+	if target == "" {
+		return nil, fmt.Errorf("grpc: upstream target must not be empty")
 	}
 
-	addr := endpoints[0]
-	logger.Logf("connecting to %s at %s", serviceName, addr)
-
-	conn, err := grpc.NewClient(
-		addr,
+	conn, err := grpc.NewClient(target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
+		grpc.WithDisableServiceConfig(),
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff:           backoff.DefaultConfig,
+			MinConnectTimeout: 5 * time.Second,
+		}),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                30 * time.Second,
+			Timeout:             10 * time.Second,
+			PermitWithoutStream: true,
+		}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("grpc dial %s failed: %w", addr, err)
+		return nil, fmt.Errorf("grpc: create client for %s: %w", target, err)
 	}
 
 	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
+		OnStart: func(context.Context) error {
 			conn.Connect()
 			return nil
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(context.Context) error {
 			return conn.Close()
 		},
 	})

@@ -29,7 +29,7 @@ func ProvideHTTPServer(lc fx.Lifecycle, p HTTPServerParams) *gin.Engine {
 	})
 
 	srv := &http.Server{
-		Addr:         p.Config.HttpAddr,
+		Addr:         p.Config.Service.HTTPAddr,
 		Handler:      server,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -40,7 +40,7 @@ func ProvideHTTPServer(lc fx.Lifecycle, p HTTPServerParams) *gin.Engine {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			go func() {
-				logger.Logf("HTTP server listening on %s", p.Config.HttpAddr)
+				logger.Logf("HTTP server listening on %s", p.Config.Service.HTTPAddr)
 				serverErrors <- srv.ListenAndServe()
 			}()
 			return nil

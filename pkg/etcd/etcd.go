@@ -1,70 +1,34 @@
-package etcdregister
+package etcd
 
 import (
+	"context"
 	"fmt"
-	"time"
 
-	"github.com/peterouob/seckill_service/pkg/etcd/server"
-	"github.com/peterouob/seckill_service/pkg/logger"
+	"github.com/peterouob/seckill_service/pkg/config"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/fx"
 )
 
-type EtcdRegister struct {
-	Client  *server.EtcdService
-	leaseId clientv3.LeaseID
-	heart   int64
-	expire  chan struct{}
-	stopCh  chan struct{}
-}
-
-func NewEtcdRegister(endpoints []string, heart int64) *EtcdRegister {
-	c := server.RegisterETCD(endpoints, heart)
-	e := &EtcdRegister{
-		Client: c,
-		heart:  heart,
-		expire: make(chan struct{}, 1),
-		stopCh: make(chan struct{}),
+func newClient(cfg *config.Config) (*clientv3.Client, error) {
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   cfg.Etcd.Endpoints,
+		DialTimeout: cfg.Etcd.DialTimeout,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("etcd: connect to %v: %w", cfg.Etcd.Endpoints, err)
 	}
-	return e
+	return client, nil
 }
 
-func (e *EtcdRegister) Register(serviceName, value string) error {
-	leaseID := e.Client.Register(serviceName, value, 0, e.expire)
-	if leaseID == 0 {
-		return fmt.Errorf("register service %s failed", serviceName)
-	}
-	e.leaseId = leaseID
-
-	go e.watchExpire(serviceName, value)
-	return nil
-}
-
-func (e *EtcdRegister) watchExpire(serviceName, value string) {
-	ticker := time.NewTicker(time.Duration(e.heart/3) * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-e.stopCh:
-			logger.Log("etcd register loop stopped")
-			return
-
-		case <-e.expire:
-			logger.Log("lease expired, re-registering immediately...")
-			newID := e.Client.Register(serviceName, value, 0, e.expire)
-			if newID == 0 {
-				logger.ErrorMsgF("re-register failed for %s", serviceName)
-				continue
-			}
-			e.leaseId = newID
-			logger.Logf("re-registered %s with new leaseID %d", serviceName, newID)
+var Module = fx.Module("etcd",
+	fx.Provide(func(lc fx.Lifecycle, cfg *config.Config) (*clientv3.Client, error) {
+		client, err := newClient(cfg)
+		if err != nil {
+			return nil, err
 		}
-	}
-}
-
-func (e *EtcdRegister) UnRegister(serviceName, addr string) error {
-	close(e.stopCh)
-	err := e.Client.UnRegister(serviceName, addr)
-	logger.Logf("unregister service: %s from etcd, addr: %s", serviceName, addr)
-	return err
-}
+		lc.Append(fx.Hook{
+			OnStop: func(context.Context) error { return client.Close() },
+		})
+		return client, nil
+	}),
+)

@@ -10,32 +10,33 @@ import (
 	"go.uber.org/fx"
 )
 
-func connRedis() *redis.Client {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6380",
-		Password: "",
-		DB:       0,
+func open(cfg *config.Config) *redis.Client {
+	client := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+		PoolSize: cfg.Redis.PoolSize,
 	})
 
-	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		panic(fmt.Errorf("failed to connect redis %v\n", err))
-	}
-
-	return rdb
+	return client
 }
 
-var RedisModule = fx.Module("redis", fx.Provide(
-	func(lc fx.Lifecycle, cfg *config.Config) *redis.Client {
-		rdb := connRedis()
+var Module = fx.Module("redis",
+	fx.Provide(func(lc fx.Lifecycle, cfg *config.Config) (*redis.Client, error) {
+		client := open(cfg)
 		lc.Append(fx.Hook{
-			OnStop: func(ctx context.Context) error {
-				logger.Log("redis connect closing ...")
-				if err := rdb.Close(); err != nil {
-					return err
+			OnStart: func(ctx context.Context) error {
+				if err := client.Ping(ctx).Err(); err != nil {
+					return fmt.Errorf("redis: ping: %w", err)
 				}
+				logger.Log("redis: connect")
 				return nil
 			},
+			OnStop: func(ctx context.Context) error {
+				logger.Log("redis: disconnect")
+				return client.Close()
+			},
 		})
-		return rdb
-	},
-))
+		return client, nil
+	}),
+)

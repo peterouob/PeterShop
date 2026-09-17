@@ -49,7 +49,7 @@ func ProvideGrpcServer(lc fx.Lifecycle, p GrpcServerParams) (*grpc.Server, GrpcS
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			lis, err := net.Listen("tcp", p.Config.GrpcAddr)
+			lis, err := net.Listen("tcp", p.Config.Service.GRPCAddr)
 			if err != nil {
 				logger.Error("grpc listen failed", err)
 				return err
@@ -57,7 +57,7 @@ func ProvideGrpcServer(lc fx.Lifecycle, p GrpcServerParams) (*grpc.Server, GrpcS
 
 			healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 			go func() {
-				logger.Logf("gRPC server listening on %s", p.Config.GrpcAddr)
+				logger.Logf("gRPC server listening on %s", p.Config.Service.GRPCAddr)
 				close(readyC)
 				serveErr <- server.Serve(lis)
 			}()

@@ -9,52 +9,52 @@ import (
 	"go.uber.org/fx"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
-func connMysql(dsn string) *gorm.DB {
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
-
+func open(cfg *config.Config) (*gorm.DB, error) {
+	db, err := gorm.Open(mysql.Open(cfg.MySQL.DSN()), &gorm.Config{
+		Logger:                 gormlogger.Default.LogMode(gormlogger.Warn),
+		SkipDefaultTransaction: true,
+		PrepareStmt:            true,
+	})
 	if err != nil {
-		panic(fmt.Errorf("failed to connect database %v\n", err))
+		return nil, fmt.Errorf("mysql: open %s:%d/%s: %w", cfg.MySQL.Host, cfg.MySQL.Port, cfg.MySQL.Database, err)
 	}
-	return db
+
+	return db, nil
 }
 
-type MigrationParams struct {
-	fx.In
-	Db     *gorm.DB
-	Models []any `group:"gorm_models"`
-}
-
-func runMigration(m MigrationParams) error {
-	if len(m.Models) > 0 {
-		logger.Log("migration model table ...")
-
-		for _, model := range m.Models {
-			if err := m.Db.AutoMigrate(model); err != nil {
-				return err
-			}
+var Module = fx.Module("mysql",
+	fx.Provide(func(lc fx.Lifecycle, cfg *config.Config) (*gorm.DB, error) {
+		db, err := open(cfg)
+		if err != nil {
+			return nil, err
 		}
-	}
-	return nil
-}
 
-var MySQLModule = fx.Module("mysql",
-	fx.Provide(
-		func(lc fx.Lifecycle, cfg *config.Config) *gorm.DB {
-			db := connMysql(cfg.DbDSN)
-			lc.Append(fx.Hook{
-				OnStop: func(ctx context.Context) error {
-					logger.Log("database connection closing...")
-					sqlDb, err := db.DB()
-					if err != nil {
-						return err
-					}
-					return sqlDb.Close()
-				},
-			})
-			return db
-		},
-	),
-	fx.Invoke(runMigration),
+		sql, err := db.DB()
+		if err != nil {
+			return nil, err
+		}
+
+		lc.Append(fx.Hook{
+			OnStart: func(context.Context) error {
+
+				sql.SetMaxOpenConns(cfg.MySQL.MaxOpenConns)
+				sql.SetMaxIdleConns(cfg.MySQL.MaxIdleConns)
+				sql.SetConnMaxLifetime(cfg.MySQL.ConnMaxLifetime)
+
+				if err := sql.Ping(); err != nil {
+					return err
+				}
+				logger.Log("mysql: connect")
+				return nil
+			},
+			OnStop: func(context.Context) error {
+				logger.Log("mysql: closing connection pool")
+				return sql.Close()
+			},
+		})
+		return db, nil
+	}),
 )

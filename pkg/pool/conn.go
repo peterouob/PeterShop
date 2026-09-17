@@ -1,8 +1,6 @@
 package pool
 
 import (
-	"sync/atomic"
-
 	"google.golang.org/grpc"
 )
 
@@ -11,10 +9,9 @@ type Conn interface {
 }
 
 type conn struct {
-	cc    *grpc.ClientConn
-	pool  *pool
-	once  bool
-	count atomic.Int32
+	cc   *grpc.ClientConn
+	pool *pool
+	once bool
 }
 
 var _ Conn = (*conn)(nil)

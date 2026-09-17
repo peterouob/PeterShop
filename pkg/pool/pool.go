@@ -153,14 +153,14 @@ func (p *pool) Status() string {
 func (p *pool) incRef() {
 	p.ref.Add(1)
 	if p.ref.Load() == math.MaxInt32 {
-		panic(fmt.Sprint("ref overflow"))
+		panic("ref overflow")
 	}
 }
 
 func (p *pool) decRef() {
 	newRef := p.ref.Add(-1)
 	if atomic.LoadInt32(&newRef) < 0 && p.closed.Load() == 0 {
-		panic(fmt.Sprint("ref overflow to negative"))
+		panic("ref overflow to negative")
 	}
 
 	if atomic.LoadInt32(&newRef) == 0 && p.curr.Load() > p.opt.MaxIdle {
