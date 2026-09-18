@@ -3,6 +3,8 @@ MIGRATIONS     := file://deploy/migrations
 REGISTRY       ?= peter123ouob
 TAG            ?= latest
 PLATFORM       ?= linux/$(shell go env GOARCH)
+SVC_PREFIX 	   ?= deploy/
+SVC_ALL        ?= deploy/api-gateway deploy/user-service deploy/seckill-service
 
 SERVICES := api-gateway user-service seckill-service
 
@@ -12,22 +14,27 @@ TARGET_seckill-service := service/seckill-service/cmd
 
 K8S_OVERLAY ?= deploy/k8s/overlays/local
 
-.PHONY: build test lint fmt tidy migrate-up migrate-down migrate-version images infra-up infra-down k8s-load k8s-build k8s-apply k8s-delete
+.PHONY: tidy fmt lint test build \
+        migrate-up migrate-down migrate-version \
+        images \
+        infra-up infra-down \
+        k8s-load k8s-build k8s-apply k8s-delete k8s-update
 
-build:
-	go build ./...
-
-test:
-	go test ./... -race -count=1
-
-lint:
-	golangci-lint run ./...
-
-fmt:
-	gofmt -w .
 
 tidy:
 	go mod tidy
+
+fmt: tidy
+	gofmt -w .
+
+lint: fmt
+	golangci-lint run ./...
+
+test: lint
+	go test ./... -race -count=1
+
+build:
+	go build ./...
 
 migrate-up:
 	go run ./cmd/migrate -source $(MIGRATIONS) -direction up
@@ -63,6 +70,12 @@ k8s-apply:
 
 k8s-delete:
 	kubectl delete -k $(K8S_OVERLAY)
+
+k8s-update-%:
+	kubectl rollout restart $(SVC_PREFIX)$*
+
+k8s-update:
+	kubectl rollout restart $(SVC)
 
 gen-%:
 	protoc --proto_path=$(API_DIR)/$* \
