@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+option go_package = "../snowflakeproto";
+
+message NextIdRequest {}
+
+message NextIdResponse {
+  fixed64 id = 1;
+}
+
+message NextIdsRequest {
+  uint32 count = 1;
+}
+
+message NextIdsResponse {
+  repeated fixed64 ids = 1;
+}
+
+message ParseIdRequest {
+  fixed64 id = 1;
+}
+
+message ParseIdResponse {
+  int64 time_stamp = 1;
+  uint32 worker_id = 2;
+  uint32 sequence = 3;
+}
+
+service SnowIdGenerate {
+  rpc NextId(NextIdRequest) returns (NextIdResponse);
+  rpc NextIds(NextIdsRequest) returns (NextIdsResponse);
+  rpc ParseId(ParseIdRequest) returns (ParseIdRequest);
+}
