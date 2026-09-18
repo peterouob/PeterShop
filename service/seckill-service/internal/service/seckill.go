@@ -63,15 +63,6 @@ func (s *seckillService) Buy(ctx context.Context, userID, productID string) erro
 }
 
 func (s *seckillService) reduceStock(ctx context.Context, productID string) error {
-	mutex := concurrency.NewMutex(s.session, fmt.Sprintf("/seckill/locks/%s", productID))
-
-	if err := mutex.Lock(ctx); err != nil {
-		return fmt.Errorf("seckill: acquire lock for product %s: %w", productID, err)
-	}
-	defer func() {
-		_ = mutex.Unlock(context.WithoutCancel(ctx))
-	}()
-
 	if err := s.repo.ReduceStock(ctx, productID); err != nil {
 		return fmt.Errorf("seckill: reduce stock for product %s: %w", productID, err)
 	}

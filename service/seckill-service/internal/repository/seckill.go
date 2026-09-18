@@ -65,6 +65,7 @@ func (r *seckillRepoImpl) DeductStock(ctx context.Context, productID string, use
 	return int(result.(int64)), nil
 }
 
+// TODO: move to the order service, the seckill only let the msg to the kafka
 func (r *seckillRepoImpl) ReduceStock(ctx context.Context, productId string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&model.Stock{}).
