@@ -8,6 +8,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/peterouob/seckill_service/pkg/config"
+	"github.com/peterouob/seckill_service/pkg/logger"
 	"github.com/peterouob/seckill_service/pkg/mq"
 )
 
@@ -38,14 +39,18 @@ func producerConfig(k config.Kafka) (*sarama.Config, error) {
 	c := sarama.NewConfig()
 	c.ClientID = k.ClientID
 	c.Producer.RequiredAcks = acks
+
 	c.Producer.Idempotent = true
+	// wait for the ack
+	c.Producer.RequiredAcks = sarama.WaitForAll
+	c.Producer.Retry.Max = 3
 	c.Producer.Return.Successes = true
 	c.Producer.Return.Errors = true
 	c.Producer.Retry.Max = k.MaxRetries
 	c.Producer.Retry.Backoff = k.RetryBackoff
 	c.Producer.Compression = sarama.CompressionZSTD
 	c.Producer.Partitioner = sarama.NewHashPartitioner
-	c.Net.MaxOpenRequests = 1
+	c.Net.MaxOpenRequests = 5
 	return c, nil
 }
 
@@ -54,14 +59,16 @@ func (p *producer) Send(ctx context.Context, topic string, msg mq.Message) error
 }
 
 func (p *producer) SendBatch(ctx context.Context, topic string, msgs []mq.Message) error {
-	if p.closed.Load() {
+	switch {
+
+	case p.closed.Load():
 		return mq.ErrProducerClosed
-	}
-	if len(msgs) == 0 {
+	case len(msgs) == 0:
+		logger.Warn("no msgs")
 		return nil
-	}
-	if err := ctx.Err(); err != nil {
-		return err
+	case ctx.Err() != nil:
+		logger.Error("error in ctx when send batch", ctx.Err())
+		return ctx.Err()
 	}
 
 	records := make([]*sarama.ProducerMessage, len(msgs))
