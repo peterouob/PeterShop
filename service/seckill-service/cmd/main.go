@@ -7,7 +7,6 @@ import (
 	"github.com/peterouob/seckill_service/pkg/config"
 	"github.com/peterouob/seckill_service/pkg/database"
 	"github.com/peterouob/seckill_service/pkg/etcd"
-	"github.com/peterouob/seckill_service/pkg/leader"
 	"github.com/peterouob/seckill_service/pkg/logger"
 	"github.com/peterouob/seckill_service/pkg/mq/kafka"
 	transport "github.com/peterouob/seckill_service/pkg/transport/grpc"
@@ -42,7 +41,6 @@ func main() {
 		database.Module,
 		cache.Module,
 		etcd.Module,
-		leader.Module,
 		kafka.ProducerModule,
 		transport.GrpcServerModule,
 		seckillModule,
