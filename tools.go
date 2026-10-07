@@ -37,7 +37,7 @@ func main() {
 	layout := fmt.Sprintf(`service/%s-service/
 ├── cmd/
 │   └── main.go          # entrypoint: fx wiring for this service only
-└── internal/            # private to this service, never imported by others
+└──internal/            # private to this service, never imported by others
     ├── model/           # domain types and DTOs
     ├── service/         # business logic (use cases)
     ├── repository/      # persistence: MySQL, Redis, Lua scripts
