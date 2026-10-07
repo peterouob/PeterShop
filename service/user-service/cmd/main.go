@@ -28,17 +28,19 @@ var userModule = fx.Module(serviceName,
 	}),
 )
 
+var app = fx.Options(
+	fx.Provide(func() (*config.Config, error) {
+		return config.Load(serviceName, config.SectionMySQL, config.SectionJWT)
+	}),
+	auth.Module,
+	database.Module,
+	transport.GrpcServerModule,
+	userModule,
+)
+
 func main() {
 	_ = godotenv.Load()
 	logger.InitLogger(serviceName)
 
-	fx.New(
-		fx.Provide(func() (*config.Config, error) {
-			return config.Load(serviceName, config.SectionMySQL, config.SectionJWT)
-		}),
-		auth.Module,
-		database.Module,
-		transport.GrpcServerModule,
-		userModule,
-	).Run()
+	fx.New(app).Run()
 }

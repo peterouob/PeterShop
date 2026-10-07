@@ -13,15 +13,17 @@ import (
 
 const serviceName = "api-gateway"
 
+var app = fx.Options(
+	fx.Provide(func() (*config.Config, error) { return config.Load(serviceName, config.SectionJWT) }),
+	auth.Module,
+	transport.HTTPServerModule,
+	client.Module,
+	router.Module,
+)
+
 func main() {
 	_ = godotenv.Load()
 	logger.InitLogger(serviceName)
 
-	fx.New(
-		fx.Provide(func() (*config.Config, error) { return config.Load(serviceName, config.SectionJWT) }),
-		auth.Module,
-		transport.HTTPServerModule,
-		client.Module,
-		router.Module,
-	).Run()
+	fx.New(app).Run()
 }

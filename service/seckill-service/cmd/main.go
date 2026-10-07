@@ -30,19 +30,21 @@ var seckillModule = fx.Module(serviceName,
 	}),
 )
 
+var app = fx.Options(
+	fx.Provide(func() (*config.Config, error) {
+		return config.Load(serviceName, config.SectionMySQL, config.SectionRedis, config.SectionKafka, config.SectionEtcd)
+	}),
+	database.Module,
+	cache.Module,
+	etcd.Module,
+	kafka.ProducerModule,
+	transport.GrpcServerModule,
+	seckillModule,
+)
+
 func main() {
 	_ = godotenv.Load()
 	logger.InitLogger(serviceName)
 
-	fx.New(
-		fx.Provide(func() (*config.Config, error) {
-			return config.Load(serviceName, config.SectionMySQL, config.SectionRedis, config.SectionKafka, config.SectionEtcd)
-		}),
-		database.Module,
-		cache.Module,
-		etcd.Module,
-		kafka.ProducerModule,
-		transport.GrpcServerModule,
-		seckillModule,
-	).Run()
+	fx.New(app).Run()
 }
