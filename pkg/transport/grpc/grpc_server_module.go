@@ -2,9 +2,8 @@ package transport
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net"
-	"time"
 
 	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	grpcrecovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
@@ -24,13 +23,10 @@ type GrpcServerParams struct {
 	fx.In
 	Config   *config.Config
 	Services []grpc.ServiceDesc `group:"grpc_services"`
+	Shutdown fx.Shutdowner
 }
 
-type GrpcServerReady struct {
-	C <-chan struct{}
-}
-
-func ProvideGrpcServer(lc fx.Lifecycle, p GrpcServerParams) (*grpc.Server, GrpcServerReady) {
+func ProvideGrpcServer(lc fx.Lifecycle, p GrpcServerParams) *grpc.Server {
 	server := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			grpcrecovery.UnaryServerInterceptor(),
@@ -44,8 +40,6 @@ func ProvideGrpcServer(lc fx.Lifecycle, p GrpcServerParams) (*grpc.Server, GrpcS
 	grpc_health_v1.RegisterHealthServer(server, healthSrv)
 
 	reflection.Register(server)
-	readyC := make(chan struct{})
-	serveErr := make(chan error, 1)
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
@@ -56,17 +50,20 @@ func ProvideGrpcServer(lc fx.Lifecycle, p GrpcServerParams) (*grpc.Server, GrpcS
 			}
 
 			healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+			logger.Logf("gRPC server listening on %s", p.Config.Service.GRPCAddr)
+
 			go func() {
-				logger.Logf("gRPC server listening on %s", p.Config.Service.GRPCAddr)
-				close(readyC)
-				serveErr <- server.Serve(lis)
+				if err := server.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+					logger.Error("grpc server stopped unexpectedly", err)
+					healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+
+					if sutdownErr := p.Shutdown.Shutdown(fx.ExitCode(1)); sutdownErr != nil {
+						logger.Error("shutdown failed", sutdownErr)
+					}
+				}
 			}()
-			select {
-			case err := <-serveErr:
-				return fmt.Errorf("grpc server failed to start: %w", err)
-			case <-time.After(50 * time.Millisecond):
-				return nil
-			}
+
+			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			logger.Log("gRPC server graceful stopping...")
@@ -92,7 +89,7 @@ func ProvideGrpcServer(lc fx.Lifecycle, p GrpcServerParams) (*grpc.Server, GrpcS
 		},
 	})
 
-	return server, GrpcServerReady{readyC}
+	return server
 }
 
 var GrpcServerModule = fx.Module("grpc_server",

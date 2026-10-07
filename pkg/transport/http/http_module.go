@@ -2,6 +2,8 @@ package transport
 
 import (
 	"context"
+	"errors"
+	"net"
 	"net/http"
 	"time"
 
@@ -13,7 +15,8 @@ import (
 
 type HTTPServerParams struct {
 	fx.In
-	Config *config.Config
+	Config   *config.Config
+	Shutdown fx.Shutdowner
 }
 
 func ProvideHTTPServer(lc fx.Lifecycle, p HTTPServerParams) *gin.Engine {
@@ -36,12 +39,23 @@ func ProvideHTTPServer(lc fx.Lifecycle, p HTTPServerParams) *gin.Engine {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	serverErrors := make(chan error, 1)
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
+			lis, err := net.Listen("tcp", p.Config.Service.HTTPAddr)
+			if err != nil {
+				logger.Error("HTTP listen failed", err)
+				return err
+			}
+
+			logger.Logf("HTTP server listening on %s", lis.Addr())
+
 			go func() {
-				logger.Logf("HTTP server listening on %s", p.Config.Service.HTTPAddr)
-				serverErrors <- srv.ListenAndServe()
+				if err := srv.Serve(lis); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					logger.Logf("HTTP server error: %v", err)
+					if shutdownErr := p.Shutdown.Shutdown(fx.ExitCode(1)); shutdownErr != nil {
+						logger.Logf("fx shutdown failed: %v", shutdownErr)
+					}
+				}
 			}()
 			return nil
 		},
