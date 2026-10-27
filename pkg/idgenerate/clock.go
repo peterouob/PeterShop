@@ -3,7 +3,7 @@ package idgenerate
 import "time"
 
 type clock struct {
-	wall func() time.Time
+	now  func() time.Time
 	base time.Time
 }
 
@@ -11,10 +11,10 @@ func newClock(wall func() time.Time) clock {
 	if wall == nil {
 		wall = time.Now
 	}
-	return clock{wall: wall, base: time.Now()}
+	return clock{now: wall, base: time.Now()}
 }
 
-func (c clock) wallMs() int64 { return c.wall().UnixMilli() }
+func (c clock) wallMs() int64 { return c.now().UnixMilli() - epochMs }
 
 func (c clock) mono() time.Duration { return time.Since(c.base) }
 
