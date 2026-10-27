@@ -14,9 +14,8 @@ const (
 )
 
 var (
-	ErrLeaseExpired         = errors.New("idgenerate: lease expired")
-	ErrReservationExhausted = errors.New("idgenerate: reservation exhausted")
-	ErrClosed               = errors.New("idgenerate: session closed")
+	ErrLeaseExpired = errors.New("idgenerate: lease expired")
+	ErrClosed       = errors.New("idgenerate: session closed")
 )
 
 type session struct {
@@ -56,13 +55,9 @@ func (s *session) reserveTarget(nowMs int64, window time.Duration) (int64, bool)
 	return target, true
 }
 
-func (s *session) admit(tsMs int64, mono time.Duration) error {
+func (s *session) admit(mono time.Duration) error {
 	if !s.lease.valid(mono) {
 		return ErrLeaseExpired
-	}
-
-	if !s.reserve.coverTs(tsMs) {
-		return ErrReservationExhausted
 	}
 	return nil
 }

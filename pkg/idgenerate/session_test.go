@@ -1,6 +1,7 @@
 package idgenerate
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -33,14 +34,14 @@ func TestReservation_Advance(t *testing.T) {
 
 func TestSessionCloseSealsGenerator(t *testing.T) {
 	s := newSession(1, 1, 0, clockAnchor{})
-	_, err := s.gen.next(100)
+	_, err := s.gen.next(100, math.MaxInt64)
 	assert.NoError(t, err)
 
 	last, ok := s.close()
 	assert.True(t, ok)
 	assert.Equal(t, int64(100), last)
 
-	id, err := s.gen.next(200)
+	id, err := s.gen.next(200, math.MaxInt64)
 	assert.Error(t, err, ErrClosed)
 	assert.Equal(t, int64(0), id)
 }
@@ -56,14 +57,14 @@ func TestClockAnchorDetectsJumps(t *testing.T) {
 		want time.Duration
 	}{
 		{"in sync", w.Add(5 * time.Second), 15 * time.Second, 0},
-		{"wall jumped forward", w.Add(10 * time.Second), 15 * time.Second, 5 * time.Second},
-		{"wall jumped back", w.Add(2 * time.Second), 15 * time.Second, -3 * time.Second},
+		{"now jumped forward", w.Add(10 * time.Second), 15 * time.Second, 5 * time.Second},
+		{"now jumped back", w.Add(2 * time.Second), 15 * time.Second, -3 * time.Second},
 		{"no time elapsed", w, 10 * time.Second, 0},
-		{"wall stalled", w, 15 * time.Second, -5 * time.Second},
+		{"now stalled", w, 15 * time.Second, -5 * time.Second},
 		{"sub-second drift", w.Add(5*time.Second + time.Millisecond), 15 * time.Second, time.Millisecond},
 		{"drift after long uptime", w.Add(time.Hour + 30*time.Second), time.Hour + 10*time.Second, 30 * time.Second},
 		{"large forward jump", w.Add(24*time.Hour + 5*time.Second), 15 * time.Second, 24 * time.Hour},
-		{"wall before anchor", w.Add(-time.Hour), 15 * time.Second, -(time.Hour + 5*time.Second)},
+		{"now before anchor", w.Add(-time.Hour), 15 * time.Second, -(time.Hour + 5*time.Second)},
 	}
 	for _, c := range cases {
 		if got := a.drift(c.wall, c.mono); got != c.want {
