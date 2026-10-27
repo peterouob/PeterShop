@@ -31,9 +31,23 @@ func TestReservation_Advance(t *testing.T) {
 	assert.False(t, r.coverTs(101))
 }
 
+func TestSessionCloseSealsGenerator(t *testing.T) {
+	s := newSession(1, 1, 0, clockAnchor{})
+	_, err := s.gen.next(100)
+	assert.NoError(t, err)
+
+	last, ok := s.close()
+	assert.True(t, ok)
+	assert.Equal(t, int64(100), last)
+
+	id, err := s.gen.next(200)
+	assert.Error(t, err, ErrClosed)
+	assert.Equal(t, int64(0), id)
+}
+
 func TestClockAnchorDetectsJumps(t *testing.T) {
 	w := time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC)
-	a := newClock(w, 10*time.Second)
+	a := newClockAnchor(w, 10*time.Second)
 
 	cases := []struct {
 		name string

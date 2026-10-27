@@ -1,7 +1,6 @@
 package idgenerate
 
 import (
-	"context"
 	"errors"
 	"math"
 	"sync/atomic"
@@ -15,75 +14,40 @@ const (
 )
 
 var (
-	ErrLeaseExpired         = errors.New("idgenerate session: lease expired")
-	ErrReservationExhausted = errors.New("idgenerate session: reservation exhausted")
-	ErrClosed               = errors.New("idgenerate session: session closed")
+	ErrLeaseExpired         = errors.New("idgenerate: lease expired")
+	ErrReservationExhausted = errors.New("idgenerate: reservation exhausted")
+	ErrClosed               = errors.New("idgenerate: session closed")
 )
 
-type Session struct {
+type session struct {
 	leaseID int64
-	clock
-	SnowFlakeIDGen
-	reservation
-	lease
+	gen     generator
+	lease   lease
+	reserve reservation
+	anchor  clockAnchor
 }
 
-func NewSession(workerID uint64, leaseID, floorMs int64, clock clock) *Session {
-	s := &Session{
-		leaseID:  leaseID,
-		clock:    clock,
-		workerID: workerID,
-	}
-
+func newSession(workerID uint64, leaseID, floorMs int64, anchor clockAnchor) *session {
+	s := &session{leaseID: leaseID, anchor: anchor}
+	s.gen.workerID = workerID
 	if floorMs > 0 {
-		s.state.Store(uint64(floorMs)<<sequenceBits | sequenceMask)
+		s.gen.state.Store(uint64(floorMs)<<sequenceBits | sequenceMask)
 	}
 	return s
 }
 
-type (
-	keepAlive func(ctx context.Context, leaseID int64) (time.Duration, error)
-	reserve   func(ctx context.Context, workerID uint64, leaseID, utilMS int64) error
-)
-
-func (s *Session) KeepAlive(ctx context.Context, keepAlive keepAlive) error {
-	sendAt := s.clock.mono()
-	ttl, err := keepAlive(ctx, s.leaseID)
-	if err != nil {
-		return err
-	}
-
-	s.lease.extend(sendAt + ttl - leaseMargin)
-
-	return nil
-}
-
-func (s *Session) ReNew(ctx context.Context, window time.Duration, reserve reserve) error {
-	until, needed := s.reserveTarget(window)
-	if !needed {
-		return nil
-	}
-
-	if err := reserve(ctx, s.workerID, s.leaseID, until); err != nil {
-		return err
-	}
-
-	s.reservation.advance(until)
-	return nil
-}
-
-func (s *Session) Close() (int64, bool) {
+func (s *session) close() (int64, bool) {
 	s.lease.revoke()
-	old := s.state.Swap(sealedState)
+	old := s.gen.state.Swap(sealedState)
 	if old == sealedState || old == 0 {
 		return 0, false
 	}
 	return int64(old >> sequenceBits), true
 }
 
-func (s *Session) reserveTarget(window time.Duration) (int64, bool) {
-	cur := s.reservation.until()
-	target := s.clock.wallMs() + window.Milliseconds()
+func (s *session) reserveTarget(nowMs int64, window time.Duration) (int64, bool) {
+	cur := s.reserve.until()
+	target := nowMs + window.Milliseconds()
 
 	if target-cur < int64(math.Ceil(float64(window.Milliseconds())/2)) {
 		return cur, false
@@ -92,12 +56,12 @@ func (s *Session) reserveTarget(window time.Duration) (int64, bool) {
 	return target, true
 }
 
-func (s *Session) admit(tsMs int64) error {
-	if !s.lease.valid(s.clock.mono()) {
+func (s *session) admit(tsMs int64, mono time.Duration) error {
+	if !s.lease.valid(mono) {
 		return ErrLeaseExpired
 	}
 
-	if !s.reservation.coverTs(tsMs) {
+	if !s.reserve.coverTs(tsMs) {
 		return ErrReservationExhausted
 	}
 	return nil
@@ -148,30 +112,4 @@ func (r *reservation) advance(untilMs int64) bool {
 func (r *reservation) until() int64 { return r.untilMs.Load() }
 func (r *reservation) coverTs(tsMs int64) bool {
 	return r.untilMs.Load() >= tsMs
-}
-
-type clock struct {
-	now        func() time.Time
-	originTime time.Time
-}
-
-func newClock(now func() time.Time) clock {
-	if now == nil {
-		now = time.Now
-	}
-
-	return clock{now: now, originTime: now()}
-}
-
-func (c clock) wallMs() int64 {
-	return c.now().Round(0).UnixMilli()
-}
-
-func (c clock) mono() time.Duration {
-	return c.now().Sub(c.originTime)
-}
-
-func (c clock) drift() time.Duration {
-	t := c.now()
-	return t.Round(0).Sub(c.originTime.Round(0)) - t.Sub(c.originTime)
 }
