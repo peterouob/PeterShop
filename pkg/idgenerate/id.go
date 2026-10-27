@@ -15,18 +15,25 @@ const (
 )
 
 const (
-	MaxAhead     int64 = 1 << 20
-	MaxTimeStamp int64 = (1 << 41) - 1
+	maxAhead     int64 = 1 << 20
+	maxTimestamp int64 = (1 << 41) - 1
 )
 
-type SnowFlakeIDGen struct {
+var ErrClockAhead = errors.New("idgenerate: sequence exhausted beyond allowed clock lead")
+
+type generator struct {
 	workerID uint64
 	state    atomic.Uint64
 }
 
-func (s *SnowFlakeIDGen) next(ts int64) (int64, error) {
+func (s *generator) next(ts int64) (int64, error) {
 	for {
 		old := s.state.Load()
+
+		if old == sealedState {
+			return 0, ErrClosed
+		}
+
 		next := old + 1
 
 		if ts > int64(old)>>sequenceBits {
@@ -35,21 +42,21 @@ func (s *SnowFlakeIDGen) next(ts int64) (int64, error) {
 
 		nextTS := int64(next) >> sequenceBits
 
-		if nextTS-ts > MaxAhead {
-			return 0, errors.New("ahead the time")
+		if nextTS-ts > maxAhead {
+			return 0, ErrClockAhead
 		}
 
 		if s.state.CompareAndSwap(old, next) {
-			return Compose(nextTS, s.workerID, next&sequenceMask), nil
+			return compose(nextTS, s.workerID, next&sequenceMask), nil
 		}
 	}
 }
 
-func Compose(timeDiff int64, workerID, sequenceID uint64) int64 {
+func compose(timeDiff int64, workerID, sequenceID uint64) int64 {
 	return (timeDiff << timestampShift) | (int64(workerID) << workerIDShift) | int64(sequenceID)
 }
 
-func DeCompose(id int64) (timeDiff int64, workerID, sequenceID uint64) {
+func decompose(id int64) (timeDiff int64, workerID, sequenceID uint64) {
 	timeDiff = id >> timestampShift
 	workerID = (uint64(id) >> workerIDShift) & maxWorkerID
 	sequenceID = uint64(id) & sequenceMask

@@ -21,8 +21,8 @@ func TestComposeDecompose(t *testing.T) {
 	}
 
 	for _, tc := range testCase {
-		id := Compose(tc.ts, tc.workerID, tc.seqID)
-		gotTS, gotWorkerID, gotSeq := DeCompose(id)
+		id := compose(tc.ts, tc.workerID, tc.seqID)
+		gotTS, gotWorkerID, gotSeq := decompose(id)
 
 		assert.Equal(t, tc.ts, gotTS)
 		assert.Equal(t, tc.workerID, gotWorkerID)
@@ -36,7 +36,7 @@ func TestSnowflakeNext(t *testing.T) {
 		perG        = 100_000
 	)
 
-	snow := SnowFlakeIDGen{workerID: 1}
+	snow := generator{workerID: 1}
 	epoch := time.Now()
 	nowMs := func() int64 {
 		return time.Since(epoch).Milliseconds()
@@ -62,22 +62,24 @@ func TestSnowflakeNext(t *testing.T) {
 
 		all := slices.Concat(bucket...)
 		assert.Equal(t, gorutineNum*perG, len(all))
+		slices.Sort(all)
+		assert.Equal(t, len(all), len(slices.Compact(all)), "duplicate ids")
 	})
 }
 
 func FuzzIDComposeDecompose(f *testing.F) {
 	f.Add(int64(0), uint64(0), uint64(0))
 	f.Add(int64(1), uint64(1), uint64(1))
-	f.Add(int64(MaxTimeStamp), uint64(maxWorkerID), uint64(sequenceMask))
+	f.Add(int64(maxTimestamp), uint64(maxWorkerID), uint64(sequenceMask))
 	f.Add(int64(1758412800000-1767225600000), uint64(7), uint64(5))
 
 	f.Fuzz(func(t *testing.T, ts int64, workerID uint64, seqID uint64) {
-		ts &= MaxTimeStamp
+		ts &= maxTimestamp
 		workerID &= maxWorkerID
 		seqID &= sequenceMask
 
-		id := Compose(ts, workerID, seqID)
-		gotTS, gotWorkerID, gotSeq := DeCompose(id)
+		id := compose(ts, workerID, seqID)
+		gotTS, gotWorkerID, gotSeq := decompose(id)
 		assert.Equal(t, ts, gotTS)
 		assert.Equal(t, workerID, gotWorkerID)
 		assert.Equal(t, seqID, gotSeq)
