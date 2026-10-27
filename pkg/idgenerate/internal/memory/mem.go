@@ -92,6 +92,20 @@ func (c *Coordinator) Revoke(ctx context.Context, leaseID int64) error {
 	return nil
 }
 
+func (c *Coordinator) Occupied(ctx context.Context) ([]uint64, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	result := make([]uint64, 0, len(c.workers))
+	c.mu.Lock()
+	for _, v := range c.workers {
+		result = append(result, uint64(v.leaseID))
+	}
+	c.mu.Unlock()
+	return result, nil
+}
+
 func (c *Coordinator) Claim(ctx context.Context, workerID uint64, leaseID int64, owner string) (int64, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return coord.NoReservation, false, err

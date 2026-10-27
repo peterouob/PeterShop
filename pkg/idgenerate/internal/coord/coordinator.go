@@ -12,6 +12,7 @@ type Coordinator interface {
 	KeepAlive(ctx context.Context, leaseID int64) (time.Duration, error)
 	Revoke(ctx context.Context, leaseID int64) error
 	Claim(ctx context.Context, workerID uint64, leaseID int64, owner string) (prevMs int64, ok bool, err error)
+	Occupied(ctx context.Context) ([]uint64, error)
 	Release(ctx context.Context, workerID uint64, leaseID int64, lastMs int64) error
 	Reserve(ctx context.Context, workerID uint64, leaseID int64, untilMs int64) error
 }

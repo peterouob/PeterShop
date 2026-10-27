@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/peterouob/seckill_service/pkg/idgenerate/internal/coord"
@@ -59,7 +61,6 @@ func (c *Coordinator) KeepAlive(ctx context.Context, leaseID int64) (time.Durati
 
 func (c *Coordinator) Revoke(ctx context.Context, leaseID int64) error {
 	_, err := c.client.Revoke(ctx, clientv3.LeaseID(leaseID))
-
 	if err != nil {
 		if errors.Is(err, rpctypes.ErrLeaseNotFound) {
 			return coord.ErrLeaseNotFound
@@ -78,7 +79,6 @@ func (c *Coordinator) Claim(ctx context.Context, workerID uint64, leaseID int64,
 		If(clientv3.Compare(clientv3.CreateRevision(key), "=", 0)).
 		Then(clientv3.OpPut(key, owner, clientv3.WithLease(lid)), clientv3.OpGet(rKey)).
 		Else(clientv3.OpGet(key), clientv3.OpGet(rKey)).Commit()
-
 	if err != nil {
 		if errors.Is(err, rpctypes.ErrLeaseNotFound) {
 			return coord.NoReservation, false, coord.ErrLeaseNotFound
@@ -107,6 +107,23 @@ func (c *Coordinator) Claim(ctx context.Context, workerID uint64, leaseID int64,
 	return prev, true, nil
 }
 
+func (c *Coordinator) Occupied(ctx context.Context) ([]uint64, error) {
+	resp, err := c.client.Get(ctx, c.workersPrefix(), clientv3.WithPrefix(), clientv3.WithKeysOnly())
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]uint64, 0, len(resp.Kvs))
+	for kv := range slices.Values(resp.Kvs) {
+		id, err := strconv.ParseUint(strings.TrimPrefix(string(kv.Key), c.workersPrefix()), 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, id)
+	}
+	return result, nil
+}
+
 func (c *Coordinator) Release(ctx context.Context, workerID uint64, leaseID int64, lastMs int64) error {
 	key := c.workerKey(workerID)
 	ops := []clientv3.Op{clientv3.OpDelete(key)}
@@ -133,7 +150,6 @@ func (c *Coordinator) Reserve(ctx context.Context, workerID uint64, leaseID int6
 	resp, err := c.client.Txn(ctx).If(clientv3.Compare(clientv3.LeaseValue(c.workerKey(workerID)), "=", clientv3.LeaseID(leaseID))).
 		Then(clientv3.OpPut(c.reserveKey(workerID), strconv.FormatInt(untilMs, 10))).
 		Commit()
-
 	if err != nil {
 		if errors.Is(err, rpctypes.ErrLeaseNotFound) {
 			return coord.ErrLeaseNotFound
@@ -147,5 +163,7 @@ func (c *Coordinator) Reserve(ctx context.Context, workerID uint64, leaseID int6
 	return nil
 }
 
-func (c *Coordinator) workerKey(id uint64) string  { return fmt.Sprintf("%s/workers/%d", c.prefix, id) }
+func (c *Coordinator) workerKey(id uint64) string { return fmt.Sprintf("%s/workers/%d", c.prefix, id) }
+
 func (c *Coordinator) reserveKey(id uint64) string { return fmt.Sprintf("%s/last_ts/%d", c.prefix, id) }
+func (c *Coordinator) workersPrefix() string       { return c.prefix + "/workers/" }
