@@ -1,6 +1,7 @@
 package idgenerate
 
 import (
+	"math"
 	"slices"
 	"sync"
 	"testing"
@@ -50,7 +51,7 @@ func TestSnowflakeNext(t *testing.T) {
 			wg.Go(func() {
 				ids := make([]int64, 0, perG)
 				for range perG {
-					id, err := snow.next(nowMs())
+					id, err := snow.next(nowMs(), math.MaxInt64)
 					assert.NoError(t, err)
 					ids = append(ids, id)
 				}
@@ -84,4 +85,12 @@ func FuzzIDComposeDecompose(f *testing.F) {
 		assert.Equal(t, workerID, gotWorkerID)
 		assert.Equal(t, seqID, gotSeq)
 	})
+}
+
+func TestGeneratorNextRespectsLimit(t *testing.T) {
+	g := generator{workerID: 1}
+	g.state.Store(1000<<sequenceBits | sequenceMask)
+
+	_, err := g.next(1000, 1000)
+	assert.ErrorIs(t, err, ErrReservationExhausted)
 }

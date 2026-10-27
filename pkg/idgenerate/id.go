@@ -15,18 +15,21 @@ const (
 )
 
 const (
-	maxAhead     int64 = 1 << 20
+	maxAhead     int64 = 1 << 16 // 1.09 min and i think the active will continued 1 min
 	maxTimestamp int64 = (1 << 41) - 1
 )
 
-var ErrClockAhead = errors.New("idgenerate: sequence exhausted beyond allowed clock lead")
+var (
+	ErrClockAhead           = errors.New("idgenerate: sequence exhausted beyond allowed clock lead")
+	ErrReservationExhausted = errors.New("idgenerate: reservation exhausted")
+)
 
 type generator struct {
 	workerID uint64
 	state    atomic.Uint64
 }
 
-func (s *generator) next(ts int64) (int64, error) {
+func (s *generator) next(ts, limit int64) (int64, error) {
 	for {
 		old := s.state.Load()
 
@@ -44,6 +47,10 @@ func (s *generator) next(ts int64) (int64, error) {
 
 		if nextTS-ts > maxAhead {
 			return 0, ErrClockAhead
+		}
+
+		if nextTS > limit {
+			return 0, ErrReservationExhausted
 		}
 
 		if s.state.CompareAndSwap(old, next) {
