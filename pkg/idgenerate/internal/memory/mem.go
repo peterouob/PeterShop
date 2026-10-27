@@ -75,75 +75,81 @@ func (c *Coordinator) KeepAlive(ctx context.Context, leaseID int64) (time.Durati
 	return l.ttl, nil
 }
 
-func (c *Coordinator) Revoke(leaseID int64) error {
+func (c *Coordinator) Revoke(ctx context.Context, leaseID int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.expireLocked()
 
-	if l, ok := c.leases[leaseID]; ok {
-		c.dropLeaseLocked(leaseID, l)
+	l, ok := c.leases[leaseID]
+	if !ok {
+		return coord.ErrLeaseNotFound
 	}
+
+	c.dropLeaseLocked(leaseID, l)
 	return nil
 }
 
-func (c *Coordinator) Claim(req coord.CoordinatorReq, owner string) (int64, bool, error) {
-	if err := req.Ctx.Err(); err != nil {
+func (c *Coordinator) Claim(ctx context.Context, workerID uint64, leaseID int64, owner string) (int64, bool, error) {
+	if err := ctx.Err(); err != nil {
 		return coord.NoReservation, false, err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.expireLocked()
 
-	if w, ok := c.workers[req.WorkerID]; ok {
-		if w.leaseID != req.LeaseID {
+	if w, ok := c.workers[workerID]; ok {
+		if w.leaseID != leaseID {
 			return coord.NoReservation, false, coord.ErrKeyHadOccupied
 		}
 	} else {
-		l, ok := c.leases[req.LeaseID]
+		l, ok := c.leases[leaseID]
 		if !ok {
 			return coord.NoReservation, false, coord.ErrLeaseNotFound
 		}
-		c.workers[req.WorkerID] = worker{owner: owner, leaseID: req.LeaseID}
-		l.workers[req.WorkerID] = struct{}{}
+		c.workers[workerID] = worker{owner: owner, leaseID: leaseID}
+		l.workers[workerID] = struct{}{}
 	}
 
-	prev, ok := c.lastTs[req.WorkerID]
+	prev, ok := c.lastTs[workerID]
 	if !ok {
 		return coord.NoReservation, true, nil
 	}
 	return prev, true, nil
 }
 
-func (c *Coordinator) Release(req coord.CoordinatorReq, lastMs int64) error {
-	if err := req.Ctx.Err(); err != nil {
+func (c *Coordinator) Release(ctx context.Context, workerID uint64, leaseID int64, lastMs int64) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.expireLocked()
 
-	if !c.ownsLocked(req.WorkerID, req.LeaseID) {
+	if !c.ownsLocked(workerID, leaseID) {
 		return nil
 	}
 	if lastMs > 0 {
-		c.lastTs[req.WorkerID] = lastMs
+		c.lastTs[workerID] = lastMs
 	}
-	c.deleteWorkerLocked(req.WorkerID)
+	c.deleteWorkerLocked(workerID)
 	return nil
 }
 
-func (c *Coordinator) Reserve(req coord.CoordinatorReq, untilMs int64) error {
-	if err := req.Ctx.Err(); err != nil {
+func (c *Coordinator) Reserve(ctx context.Context, workerID uint64, leaseID int64, untilMs int64) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.expireLocked()
 
-	if !c.ownsLocked(req.WorkerID, req.LeaseID) {
+	if !c.ownsLocked(workerID, leaseID) {
 		return coord.ErrLeaseLost
 	}
-	c.lastTs[req.WorkerID] = untilMs
+	c.lastTs[workerID] = untilMs
 	return nil
 }
 
