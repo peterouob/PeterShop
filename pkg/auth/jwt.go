@@ -39,14 +39,12 @@ func (m *Manager) Issue(userID string) (string, time.Time, error) {
 	expiresAt := now.Add(m.ttl)
 
 	claims := Claims{
-		UserID:   userID,
-		AccessID: uuid.NewString(),
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   userID,
-			IssuedAt:  jwt.NewNumericDate(now),
-			NotBefore: jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(expiresAt),
-		},
+		UserID:    userID,
+		AccessID:  uuid.NewString(),
+		Subject:   userID,
+		IssuedAt:  jwt.NewNumericDate(now),
+		NotBefore: jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(expiresAt),
 	}
 
 	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secret)
