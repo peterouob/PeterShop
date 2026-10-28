@@ -16,9 +16,10 @@ import (
 const (
 	leaseTTL      = 10 * time.Second
 	safetyMargin  = 2 * time.Second
-	maxWaitTime   = 20 * time.Millisecond
+	maxWaitTime   = 20 * time.Millisecond // this is for max clock skew
 	revokeTimeout = 30 * time.Second
-	reserveAhead  = 3 * time.Second
+	reserveAhead  = 7 * time.Second // judge ahead need time > 2 * 2.5s + 1.67s = 6.67, so least 7 second
+	tickInterval  = leaseTTL / 4    // 10s / 4 = 2.5s, 8s / 2.5s = 3 retries
 )
 
 var (
@@ -86,7 +87,7 @@ func (sf *Snowflake) claim(ctx context.Context, leaseID int64) (*session, error)
 			lastMs = prevMs
 		}
 
-		s := newSession(id, leaseID, lastMs, newClockAnchor(time.UnixMilli(lastMs), sf.clock.mono()))
+		s := newSession(id, leaseID, lastMs, newClockAnchor(sf.clock.now(), sf.clock.mono()))
 		if err := sf.reserve(ctx, s); err != nil {
 			return nil, err
 		}
@@ -117,6 +118,88 @@ func (sf *Snowflake) wait(ctx context.Context, prevMs int64) (bool, error) {
 	}
 }
 
+var ErrClockJump = errors.New("lifecycle: wall clock jumped beyond tolerance")
+
+func (sf *Snowflake) startLoop(ctx context.Context, interval time.Duration) {
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		defer close(sf.done)
+
+		for {
+			cur := sf.cur.Load()
+			if cur == nil {
+				return
+			}
+
+			select {
+			case <-ticker.C:
+				err := sf.tick(ctx)
+				switch {
+				case errors.Is(err, ErrLeaseExpired):
+					sf.shutdown(ctx, cur, 0)
+
+					if err := sf.start(ctx); err != nil {
+						logger.Errorf(err, "failed to start lease")
+					}
+				case errors.Is(err, ErrClockJump):
+					last, ok := cur.close()
+					if ok {
+						sf.shutdown(ctx, cur, last)
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+func (sf *Snowflake) shutdown(ctx context.Context, cur *session, lastMs int64) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), revokeTimeout)
+	defer cancel()
+
+	defer func() {
+		if err := sf.coord.Revoke(ctx, cur.leaseID); err != nil {
+			logger.Errorf(err, "snowflake revoke failed...")
+		}
+	}()
+
+	if err := sf.coord.Release(ctx, cur.gen.workerID, cur.leaseID, lastMs); err != nil {
+		logger.Errorf(err, "snowflake release failed...")
+	}
+}
+
+func (sf *Snowflake) tick(ctx context.Context) error {
+	cur := sf.cur.Load()
+	if cur == nil {
+		return nil
+	}
+
+	now, mono := sf.clock.now(), sf.clock.mono()
+	if cur.anchor.drift(now, mono).Abs() > maxWaitTime {
+		return ErrClockJump
+	}
+
+	if err := cur.admit(mono); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, leaseTTL/6)
+	defer cancel()
+
+	if err := sf.keepAlive(ctx, cur); err != nil {
+		return err
+	}
+
+	if err := sf.renew(ctx, cur); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (sf *Snowflake) keepAlive(ctx context.Context, s *session) error {
 	sendAt := sf.clock.mono()
 	ttl, err := sf.coord.KeepAlive(ctx, s.leaseID)
@@ -124,13 +207,13 @@ func (sf *Snowflake) keepAlive(ctx context.Context, s *session) error {
 		return err
 	}
 
-	s.lease.extend(sendAt + ttl - leaseMargin)
+	s.lease.extend(sendAt + ttl - safetyMargin)
 
 	return nil
 }
 
-func (sf *Snowflake) renew(ctx context.Context, s *session, window time.Duration) error {
-	until, needed := s.reserveTarget(sf.clock.wallMs(), window)
+func (sf *Snowflake) renew(ctx context.Context, s *session) error {
+	until, needed := s.reserveTarget(sf.clock.wallMs(), reserveAhead)
 	if !needed {
 		return nil
 	}

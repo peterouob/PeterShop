@@ -21,9 +21,10 @@ func newLifecycleSnowflake(c coord.Coordinator) *Snowflake {
 
 type hookCoord struct {
 	coord.Coordinator
-	grant    func(ctx context.Context, ttl time.Duration) (*coord.LeaseGrantResp, error)
-	claim    func(ctx context.Context, workerID uint64, leaseID int64, owner string) (int64, bool, error)
-	occupied func(ctx context.Context) ([]uint64, error)
+	keepAlive func(ctx context.Context, leaseID int64) (time.Duration, error)
+	grant     func(ctx context.Context, ttl time.Duration) (*coord.LeaseGrantResp, error)
+	claim     func(ctx context.Context, workerID uint64, leaseID int64, owner string) (int64, bool, error)
+	occupied  func(ctx context.Context) ([]uint64, error)
 }
 
 func (h *hookCoord) Grant(ctx context.Context, ttl time.Duration) (*coord.LeaseGrantResp, error) {
@@ -31,6 +32,13 @@ func (h *hookCoord) Grant(ctx context.Context, ttl time.Duration) (*coord.LeaseG
 		return h.grant(ctx, ttl)
 	}
 	return h.Coordinator.Grant(ctx, ttl)
+}
+
+func (h *hookCoord) KeepAlive(ctx context.Context, leaseID int64) (time.Duration, error) {
+	if h.keepAlive != nil {
+		return h.keepAlive(ctx, leaseID)
+	}
+	return h.Coordinator.KeepAlive(ctx, leaseID)
 }
 
 func (h *hookCoord) Claim(ctx context.Context, workerID uint64, leaseID int64, owner string) (int64, bool, error) {
