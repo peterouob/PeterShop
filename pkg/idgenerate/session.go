@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	leaseMargin     = 500 * time.Millisecond
 	revokedDeadline = math.MinInt64
 	sealedState     = math.MaxUint64
 )
@@ -48,7 +47,7 @@ func (s *session) reserveTarget(nowMs int64, window time.Duration) (int64, bool)
 	cur := s.reserve.until()
 	target := nowMs + window.Milliseconds()
 
-	if target-cur < int64(math.Ceil(float64(window.Milliseconds())/2)) {
+	if target < cur {
 		return cur, false
 	}
 
