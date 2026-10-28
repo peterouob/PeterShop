@@ -16,9 +16,7 @@ var frozenNow = time.UnixMilli(epochMs + 1_000_000)
 func frozen() time.Time { return frozenNow }
 
 func newLifecycleSnowflake(c coord.Coordinator) *Snowflake {
-	sf := NewSnowflake(c)
-	sf.clock = newClock(frozen)
-	return sf
+	return &Snowflake{coord: c, clock: newClock(frozen)}
 }
 
 type hookCoord struct {

@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/peterouob/seckill_service/pkg/idgenerate/internal/coord"
+	"github.com/peterouob/seckill_service/pkg/logger"
 )
 
 const (
@@ -52,17 +54,12 @@ func (sf *Snowflake) claim(ctx context.Context, leaseID int64) (*session, error)
 		return nil, err
 	}
 
-	hostName, err := os.Hostname()
-	if err != nil {
-		return nil, err
-	}
-
 	for id := range uint64(maxWorkerID + 1) {
 		if slices.Contains(occupied, id) {
 			continue
 		}
 
-		prevMs, ok, err := sf.coord.Claim(ctx, id, leaseID, hostName)
+		prevMs, ok, err := sf.coord.Claim(ctx, id, leaseID, GetHostName())
 		if err != nil {
 			if errors.Is(err, coord.ErrKeyHadOccupied) {
 				continue
@@ -158,4 +155,20 @@ func (sf *Snowflake) reserve(ctx context.Context, s *session) error {
 
 	_ = s.reserve.advance(until)
 	return nil
+}
+
+var (
+	hostName string
+	hostOnce sync.Once
+)
+
+func GetHostName() string {
+	hostOnce.Do(func() {
+		var err error
+		hostName, err = os.Hostname()
+		if err != nil {
+			logger.Errorf(err, "get hostName failed")
+		}
+	})
+	return hostName
 }
