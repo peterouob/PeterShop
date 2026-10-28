@@ -12,18 +12,23 @@ import (
 )
 
 const (
-	leaseTTL     = 10 * time.Second
-	safetyMargin = 2 * time.Second
-	maxWaitTime  = 5 * time.Second
-	reserveAhead = 3 * time.Second
+	leaseTTL      = 10 * time.Second
+	safetyMargin  = 2 * time.Second
+	maxWaitTime   = 20 * time.Millisecond
+	revokeTimeout = 30 * time.Second
+	reserveAhead  = 3 * time.Second
 )
 
-var ErrWorkerIDExhaust = errors.New("lifecycle: not enough workerID to claim")
+var (
+	ErrWorkerIDExhaust = errors.New("lifecycle: not enough workerID to claim")
+	ErrClaimSnowflake  = errors.New("lifecycle: claim snowflake")
+)
 
 func (sf *Snowflake) start(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, leaseTTL-safetyMargin)
 	defer cancel()
 
+	now := sf.clock.mono()
 	resp, err := sf.coord.Grant(ctx, leaseTTL)
 	if err != nil {
 		return err
@@ -31,9 +36,12 @@ func (sf *Snowflake) start(ctx context.Context) error {
 
 	s, err := sf.claim(ctx, resp.ID)
 	if err != nil {
-		return sf.coord.Revoke(ctx, resp.ID)
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), revokeTimeout)
+		defer cancel()
+		_ = sf.coord.Revoke(rctx, resp.ID)
+		return fmt.Errorf("type: %w, err: %w", ErrClaimSnowflake, err)
 	}
-	s.lease.extend(sf.clock.mono() + resp.TTL - safetyMargin)
+	s.lease.extend(now + resp.TTL - safetyMargin)
 	sf.cur.Store(s)
 	return nil
 }
@@ -55,12 +63,15 @@ func (sf *Snowflake) claim(ctx context.Context, leaseID int64) (*session, error)
 		}
 
 		prevMs, ok, err := sf.coord.Claim(ctx, id, leaseID, hostName)
-		if !ok {
-			continue
+		if err != nil {
+			if errors.Is(err, coord.ErrKeyHadOccupied) {
+				continue
+			}
+			return nil, err
 		}
 
-		if err != nil {
-			return nil, err
+		if !ok {
+			continue
 		}
 
 		wait, err := sf.wait(ctx, prevMs)
@@ -73,7 +84,12 @@ func (sf *Snowflake) claim(ctx context.Context, leaseID int64) (*session, error)
 			continue
 		}
 
-		s := newSession(id, leaseID, prevMs-epochMs, newClockAnchor(time.Unix(sf.clock.wallMs(), 0), sf.clock.mono()))
+		lastMs := int64(0)
+		if prevMs != coord.NoReservation {
+			lastMs = prevMs
+		}
+
+		s := newSession(id, leaseID, lastMs, newClockAnchor(time.UnixMilli(lastMs), sf.clock.mono()))
 		if err := sf.reserve(ctx, s); err != nil {
 			return nil, err
 		}
@@ -87,14 +103,14 @@ func (sf *Snowflake) wait(ctx context.Context, prevMs int64) (bool, error) {
 	if prevMs == coord.NoReservation {
 		return false, nil
 	}
-	wait := prevMs - sf.clock.wallMs()
+	wait := time.Duration(prevMs-sf.clock.wallMs()) * time.Millisecond
 	if wait <= 0 {
 		return false, nil
-	} else if wait > maxWaitTime.Milliseconds() {
+	} else if wait > maxWaitTime {
 		return true, nil
 	}
 
-	t := time.NewTimer(time.Duration(wait))
+	t := time.NewTimer(wait)
 	defer t.Stop()
 	select {
 	case <-t.C:
@@ -137,7 +153,7 @@ func (sf *Snowflake) reserve(ctx context.Context, s *session) error {
 	}
 
 	if err := sf.coord.Reserve(ctx, s.gen.workerID, s.leaseID, until); err != nil {
-		return nil
+		return err
 	}
 
 	_ = s.reserve.advance(until)
