@@ -38,7 +38,7 @@ func newSession(workerID uint64, leaseID, floorMs int64, anchor clockAnchor) *se
 func (s *session) close() (int64, bool) {
 	s.lease.revoke()
 	old := s.gen.state.Swap(sealedState)
-	if old == sealedState || old == 0 {
+	if old == sealedState {
 		return 0, false
 	}
 	return int64(old >> sequenceBits), true
