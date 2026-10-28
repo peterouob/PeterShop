@@ -97,12 +97,14 @@ func (c *Coordinator) Occupied(ctx context.Context) ([]uint64, error) {
 		return nil, err
 	}
 
-	result := make([]uint64, 0, len(c.workers))
 	c.mu.Lock()
-	for _, v := range c.workers {
-		result = append(result, uint64(v.leaseID))
+	defer c.mu.Unlock()
+	c.expireLocked()
+
+	result := make([]uint64, 0, len(c.workers))
+	for id := range c.workers {
+		result = append(result, id)
 	}
-	c.mu.Unlock()
 	return result, nil
 }
 
