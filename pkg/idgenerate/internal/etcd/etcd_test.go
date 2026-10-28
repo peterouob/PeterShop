@@ -20,7 +20,7 @@ var testClient *clientv3.Client
 func TestMain(m *testing.M) {
 	cli, stop, err := etcdtest.StartETCDEmbed()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	testClient = cli
