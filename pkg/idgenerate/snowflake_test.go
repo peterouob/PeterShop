@@ -8,9 +8,7 @@ import (
 )
 
 func newTestSnowflake() *Snowflake {
-	sf := NewSnowflake(nil)
-	sf.clock = newClock(func() time.Time { return time.UnixMilli(epochMs + 1000) })
-	return sf
+	return &Snowflake{clock: newClock(func() time.Time { return time.UnixMilli(epochMs + 1000) })}
 }
 
 func newTestSession(untilMs int64) *session {
