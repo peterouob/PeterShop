@@ -10,7 +10,6 @@ import (
 
 	"github.com/peterouob/seckill_service/pkg/idgenerate/internal/coord"
 	"github.com/peterouob/seckill_service/pkg/idgenerate/internal/etcd"
-	"github.com/peterouob/seckill_service/pkg/logger"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -23,6 +22,9 @@ type Snowflake struct {
 	coord coord.Coordinator
 	clock clock
 	cur   atomic.Pointer[session]
+
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 func NewEtcdCoordinator(client *clientv3.Client, prefix string) coord.Coordinator {
@@ -33,11 +35,16 @@ func New(ctx context.Context, c coord.Coordinator) (*Snowflake, error) {
 	snowFlake := &Snowflake{
 		coord: c,
 		clock: newClock(time.Now),
+		done:  make(chan struct{}, 1),
 	}
 
 	backoff := 100 * time.Millisecond
 	for attempt := 1; ; attempt++ {
 		if err := snowFlake.start(ctx); err == nil {
+			loopCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+			snowFlake.cancel = cancel
+			go snowFlake.startLoop(loopCtx, tickInterval)
+
 			return snowFlake, nil
 		}
 
@@ -70,6 +77,16 @@ func (sf *Snowflake) Ready() bool {
 }
 
 func (sf *Snowflake) Close(ctx context.Context) error {
+
+	if sf.done != nil {
+		sf.cancel()
+		select {
+		case <-sf.done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
 	cur := sf.cur.Load()
 	if cur == nil {
 		return nil
@@ -80,19 +97,7 @@ func (sf *Snowflake) Close(ctx context.Context) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), revokeTimeout)
-	defer cancel()
-
-	defer func() {
-		if err := sf.coord.Revoke(ctx, cur.leaseID); err != nil {
-			logger.Errorf(err, "snowflake revoke failed...")
-		}
-	}()
-
-	if err := sf.coord.Release(ctx, cur.gen.workerID, cur.leaseID, lastMS); err != nil {
-		return err
-	}
-
+	sf.shutdown(ctx, cur, lastMS)
 	return nil
 }
 
