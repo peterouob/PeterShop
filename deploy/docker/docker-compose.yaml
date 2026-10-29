@@ -36,13 +36,12 @@ services:
     depends_on:
       - kafka
   db:
-    image: mysql:8.4
-    container_name: mysql
+    image: postgres:17-alpine
+    container_name: postgres
     environment:
-      MYSQL_ROOT_PASSWORD: "password"
-      MYSQL_DATABASE: "seckill"
+      POSTGRES_PASSWORD: "password"
     ports:
-      - "3307:3306"
+      - "5433:5432"
     networks:
       - my_bridge
   redis:

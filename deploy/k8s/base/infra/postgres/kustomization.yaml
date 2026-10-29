@@ -7,6 +7,6 @@ resources:
 
 labels:
   - pairs:
-      app.kubernetes.io/component: mysql
+      app.kubernetes.io/component: postgres
       app.kubernetes.io/part-of: infra
     includeTemplates: true
