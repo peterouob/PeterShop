@@ -24,9 +24,37 @@ spec:
                 secretKeyRef:
                   name: credentials
                   key: POSTGRES_PASSWORD
+            - name: PGPASSWORD_user
+              valueFrom:
+                secretKeyRef:
+                  name: credentials
+                  key: PGPASSWORD_user
+            - name: PGPASSWORD_seckill
+              valueFrom:
+                secretKeyRef:
+                  name: credentials
+                  key: PGPASSWORD_seckill
+            - name: PGPASSWORD_order
+              valueFrom:
+                secretKeyRef:
+                  name: credentials
+                  key: PGPASSWORD_order
+            - name: PGPASSWORD_payment
+              valueFrom:
+                secretKeyRef:
+                  name: credentials
+                  key: PGPASSWORD_payment
+          volumeMounts:
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "postgres", "-h", "127.0.0.1"]
             initialDelaySeconds: 5
             periodSeconds: 5
             failureThreshold: 30
+      volumes:
+        - name: initdb
+          configMap:
+            name: postgres-initdb
+            defaultMode: 0755

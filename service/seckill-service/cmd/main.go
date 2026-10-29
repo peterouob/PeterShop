@@ -32,7 +32,7 @@ var seckillModule = fx.Module(serviceName,
 
 var app = fx.Options(
 	fx.Provide(func() (*config.Config, error) {
-		return config.Load(serviceName, config.SectionMySQL, config.SectionRedis, config.SectionKafka, config.SectionEtcd)
+		return config.Load(serviceName, config.SectionPostgres, config.SectionRedis, config.SectionKafka, config.SectionEtcd)
 	}),
 	database.Module,
 	cache.Module,

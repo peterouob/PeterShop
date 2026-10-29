@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/mysql"
+	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/peterouob/seckill_service/pkg/config"
 )
@@ -20,7 +20,7 @@ const (
 var ErrUnknownDirection = errors.New("migrate: direction must be \"up\" or \"down\"")
 
 func Migrate(cfg *config.Config, sourceURL string, dir Direction, steps int) error {
-	m, err := migrate.New(sourceURL, cfg.MySQL.URL())
+	m, err := migrate.New(sourceURL, cfg.Postgres.URL())
 	if err != nil {
 		return fmt.Errorf("migrate: open source %s: %w", sourceURL, err)
 	}
@@ -54,7 +54,7 @@ func apply(m *migrate.Migrate, dir Direction, steps int) error {
 }
 
 func Version(cfg *config.Config, sourceURL string) (uint, bool, error) {
-	m, err := migrate.New(sourceURL, cfg.MySQL.URL())
+	m, err := migrate.New(sourceURL, cfg.Postgres.URL())
 	if err != nil {
 		return 0, false, fmt.Errorf("migrate: open source %s: %w", sourceURL, err)
 	}

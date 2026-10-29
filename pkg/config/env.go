@@ -12,11 +12,11 @@ import (
 type Section string
 
 const (
-	SectionMySQL Section = "mysql"
-	SectionRedis Section = "redis"
-	SectionKafka Section = "kafka"
-	SectionEtcd  Section = "etcd"
-	SectionJWT   Section = "jwt"
+	SectionPostgres Section = "postgres"
+	SectionRedis    Section = "redis"
+	SectionKafka    Section = "kafka"
+	SectionEtcd     Section = "etcd"
+	SectionJWT      Section = "jwt"
 )
 
 type loader struct {

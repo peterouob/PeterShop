@@ -27,6 +27,15 @@ spec:
           env:
             - name: GRPC_ADDR
               value: ":50052"
+            - name: PGUSER
+              value: svc_seckill
+            - name: PGDATABASE
+              value: db_seckill
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: credentials
+                  key: PGPASSWORD_seckill
           envFrom:
             - configMapRef:
                 name: infra

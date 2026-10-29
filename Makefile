@@ -1,5 +1,7 @@
+-include .env
+
 API_DIR        := api
-MIGRATIONS     := file://deploy/migrations
+DBS            := user seckill order payment
 REGISTRY       ?= peter123ouob
 TAG            ?= latest
 PLATFORM       ?= linux/$(shell go env GOARCH)
@@ -15,7 +17,7 @@ TARGET_seckill-service := service/seckill-service/cmd
 K8S_OVERLAY ?= deploy/k8s/overlays/local
 
 .PHONY: tidy fmt lint test build \
-        migrate-up migrate-down migrate-version \
+        migrate-up migrate-version \
         images \
         infra-up infra-down \
         k8s-load k8s-build k8s-apply k8s-delete k8s-update
@@ -36,14 +38,20 @@ test: lint
 build:
 	go build ./...
 
-migrate-up:
-	go run ./cmd/migrate -source $(MIGRATIONS) -direction up
+MIGRATE = PGUSER=svc_$* PGPASSWORD=$(PGPASSWORD_$*) PGDATABASE=db_$* \
+          go run ./cmd/migrate -source file://deploy/migrations/$*
 
-migrate-down:
-	go run ./cmd/migrate -source $(MIGRATIONS) -direction down -steps 1
+migrate-up: $(addprefix migrate-up-,$(DBS))
+migrate-version: $(addprefix migrate-version-,$(DBS))
 
-migrate-version:
-	go run ./cmd/migrate -source $(MIGRATIONS) -direction version
+migrate-up-%:
+	$(MIGRATE) -direction up
+
+migrate-down-%:
+	$(MIGRATE) -direction down -steps 1
+
+migrate-version-%:
+	@printf '%-8s ' $*; $(MIGRATE) -direction version
 
 images: $(addprefix image-,$(SERVICES))
 

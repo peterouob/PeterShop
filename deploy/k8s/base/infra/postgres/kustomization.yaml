@@ -5,6 +5,11 @@ resources:
   - deployment.yaml
   - service.yaml
 
+configMapGenerator:
+  - name: postgres-initdb
+    files:
+      - initdb.sh
+
 labels:
   - pairs:
       app.kubernetes.io/component: postgres

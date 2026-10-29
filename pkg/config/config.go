@@ -8,7 +8,7 @@ import (
 
 type Config struct {
 	Service   Service
-	MySQL     MySQL
+	Postgres  Postgres
 	Redis     Redis
 	Kafka     Kafka
 	Etcd      Etcd
@@ -22,7 +22,7 @@ type Service struct {
 	HTTPAddr string
 }
 
-type MySQL struct {
+type Postgres struct {
 	Host            string
 	Port            int
 	User            string
@@ -67,14 +67,21 @@ type Upstreams struct {
 	Seckill string
 }
 
-func (m MySQL) DSN() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s",
-		m.User, url.QueryEscape(m.Password), m.Host, m.Port, m.Database, m.Params)
-}
+// DSN is the connection URL for gorm / pgx.
+func (p Postgres) DSN() string { return p.url("postgres") }
 
-func (m MySQL) URL() string {
-	return fmt.Sprintf("mysql://%s:%s@tcp(%s:%d)/%s?%s",
-		m.User, url.QueryEscape(m.Password), m.Host, m.Port, m.Database, m.Params)
+// URL is the same connection for golang-migrate, whose pgx/v5 driver registers the pgx5 scheme.
+func (p Postgres) URL() string { return p.url("pgx5") }
+
+func (p Postgres) url(scheme string) string {
+	u := url.URL{
+		Scheme:   scheme,
+		User:     url.UserPassword(p.User, p.Password),
+		Host:     fmt.Sprintf("%s:%d", p.Host, p.Port),
+		Path:     "/" + p.Database,
+		RawQuery: p.Params,
+	}
+	return u.String()
 }
 
 func Load(serviceName string, sections ...Section) (*Config, error) {
@@ -89,16 +96,16 @@ func Load(serviceName string, sections ...Section) (*Config, error) {
 			GRPCAddr: l.str("GRPC_ADDR", ":50051"),
 			HTTPAddr: l.str("HTTP_ADDR", ":8080"),
 		},
-		MySQL: MySQL{
-			Host:            l.str("MYSQL_HOST", "127.0.0.1"),
-			Port:            l.int("MYSQL_PORT", 3306),
-			User:            l.str("MYSQL_USER", "seckill"),
-			Password:        l.secret(SectionMySQL, "MYSQL_PASSWORD"),
-			Database:        l.secret(SectionMySQL, "MYSQL_DATABASE"),
-			Params:          l.str("MYSQL_PARAMS", "charset=utf8mb4&parseTime=True&loc=Local"),
-			MaxOpenConns:    l.int("MYSQL_MAX_OPEN_CONNS", 64),
-			MaxIdleConns:    l.int("MYSQL_MAX_IDLE_CONNS", 16),
-			ConnMaxLifetime: l.duration("MYSQL_CONN_MAX_LIFETIME", time.Hour),
+		Postgres: Postgres{
+			Host:            l.str("PGHOST", "127.0.0.1"),
+			Port:            l.int("PGPORT", 5432),
+			User:            l.secret(SectionPostgres, "PGUSER"),
+			Password:        l.secret(SectionPostgres, "PGPASSWORD"),
+			Database:        l.secret(SectionPostgres, "PGDATABASE"),
+			Params:          l.str("PG_PARAMS", "sslmode=disable"),
+			MaxOpenConns:    l.int("PG_MAX_OPEN_CONNS", 20),
+			MaxIdleConns:    l.int("PG_MAX_IDLE_CONNS", 10),
+			ConnMaxLifetime: l.duration("PG_CONN_MAX_LIFETIME", time.Hour),
 		},
 		Redis: Redis{
 			Addr:     l.str("REDIS_ADDR", "127.0.0.1:6379"),

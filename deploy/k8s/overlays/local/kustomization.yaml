@@ -33,10 +33,8 @@ secretGenerator:
     behavior: replace
     literals:
       - POSTGRES_PASSWORD=password
+      - PGPASSWORD_user=password
+      - PGPASSWORD_seckill=password
+      - PGPASSWORD_order=password
+      - PGPASSWORD_payment=password
       - JWT_SECRET=local-development-secret
-
-configMapGenerator:
-  - name: infra
-    behavior: merge
-    literals:
-      - MYSQL_USER=root

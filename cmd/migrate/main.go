@@ -27,7 +27,7 @@ func main() {
 func run(source, dir string, steps int) error {
 	_ = godotenv.Load()
 
-	cfg, err := config.Load("migrate", config.SectionMySQL)
+	cfg, err := config.Load("migrate", config.SectionPostgres)
 	if err != nil {
 		return err
 	}
