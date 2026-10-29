@@ -53,7 +53,7 @@ func TestNew_RetriesUntilWorkerFreed(t *testing.T) {
 	}
 
 	time.AfterFunc(300*time.Millisecond, func() {
-		_ = c.Release(ctx, 42, other.ID, 0)
+		_ = c.Release(context.Background(), 42, other.ID, 0)
 	})
 
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)

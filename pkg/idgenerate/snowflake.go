@@ -73,7 +73,7 @@ func (sf *Snowflake) Ready() bool {
 		return false
 	}
 
-	return true
+	return cur.reserve.coverTs(sf.clock.wallMs())
 }
 
 func (sf *Snowflake) Close(ctx context.Context) error {
