@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/peterouob/seckill_service/pkg/cache/rediskey"
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/model"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -52,17 +53,18 @@ var seckillScript = redis.NewScript(`
     end
 `)
 
-func (r *seckillRepoImpl) DeductStock(ctx context.Context, productID string, userID string) (int, error) {
-	stockKey := fmt.Sprintf("secKill:{%s}:stock", productID)
-	usersKey := fmt.Sprintf("secKill:{%s}:users", productID)
-
-	keys := []string{stockKey, usersKey}
+func (r *seckillRepoImpl) DeductStock(ctx context.Context, activity string, userID string) (int, error) {
+	keys := []string{rediskey.Stock(activity), rediskey.Users(activity)}
 	result, err := seckillScript.Run(ctx, r.redisClient, keys, userID).Result()
 	if err != nil {
-		return 0, fmt.Errorf("redis腳本執行失敗: %v", err)
+		return 0, fmt.Errorf("redis script exec failed: %w", err)
 	}
 
-	return int(result.(int64)), nil
+	v, ok := result.(int64)
+	if !ok {
+		return 0, fmt.Errorf("used int64 overflow %w", errors.New("used int64 overflow"))
+	}
+	return int(v), nil
 }
 
 // TODO: move to the order service, the seckill only let the msg to the kafka
