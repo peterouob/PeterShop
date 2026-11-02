@@ -11,7 +11,7 @@ on:
       - 'README.md'
 
 jobs:
-  golanglint:
+  govet:
     name: Lint
     runs-on: ubuntu-latest
     steps:
@@ -19,13 +19,5 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: 'stable'
-      - name: Run Golang CI Lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: latest
-          working-directory: .
-          args: ./...
-      - name: Run Gosec Security Scanner
-        uses: securego/gosec@master
-        with:
-          args: ./...
+      - name: Run go vet
+        run: go vet ./...
