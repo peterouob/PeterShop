@@ -11,24 +11,32 @@ CREATE TABLE orders (
     updated_at timestamptz(3) NOT NULL,
 
     CONSTRAINT uk_order_no UNIQUE (order_no),
-    CONSTRAINT uk_user_product UNIQUE (user_id, product_id)
+    CONSTRAINT uk_user_activity UNIQUE (user_id, activity_id),
+
+    constraint ck_order_status check ( status in (1,2,3,4,5,6)),
+    constraint ck_order_amount check ( amount > 0 )
 );
 
 create index idx_status_expire on orders (status, expire_at);
 
-create table tcc_transaction (
-    id bigint generated always as identity primary key ,
-    gid bigint not null ,
-    business varchar(32) not null ,
-    order_no bigint not null ,
-    amount bigint not null ,
-    status smallint not null ,
+create table tcc_transaction
+(
+    id            bigint generated always as identity primary key,
+    gid           bigint         not null,
+    business      varchar(32)    not null,
+    order_no      bigint         not null,
+    amount        bigint         not null,
+    status        smallint       not null,
 
-    retry_count int not null default 0,
-    next_retry_at timestamptz(3) not null ,
-    created_at timestamptz(3) not null ,
-    updated_at timestamptz(3) not null ,
-    constraint uk_grid unique (gid)
+    retry_count   int            not null default 0,
+    next_retry_at timestamptz(3) not null,
+    created_at    timestamptz(3) not null,
+    updated_at    timestamptz(3) not null,
+    constraint uk_gid unique (gid),
+
+    constraint ck_tcc_transaction_status check ( status in (1, 2, 3, 4, 5, 6)),
+    constraint ck_tcc_transaction_amount check ( amount > 0 ),
+    constraint ck_tcc_transaction_business check ( business in ('order_pay', 'order_refund') )
 );
 
 create index idx_order on tcc_transaction (order_no);
@@ -37,11 +45,13 @@ create index idx_recovery on tcc_transaction (status, next_retry_at);
 create table tcc_branch (
     id bigint generated always as identity primary key ,
     gid bigint not null ,
-    branch_id varchar(32) not null ,
+    branch_id varchar(64) not null ,
     action varchar(16) not null ,
     status smallint not null ,
     last_error varchar(255) null ,
     created_at timestamptz(3) not null ,
     updated_at timestamptz(3) not null ,
-    constraint uk_branch_action unique (gid, branch_id, action)
+    constraint uk_branch_action unique (gid, branch_id, action),
+    constraint ck_tcc_branch_status check ( status in (0, 1, 2)),
+    constraint ck_tcc_branch_action check ( action in ('try', 'confirm', 'cancel') )
 );
