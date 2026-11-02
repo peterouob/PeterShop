@@ -9,16 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/peterouob/seckill_service/pkg/testkit"
 	"github.com/stretchr/testify/require"
 )
-
-func orderDB(t *testing.T) *sql.DB {
-	t.Helper()
-	db := testkit.OpenContainer(t, "order")
-	require.NoError(t, db.Migrator(t).Up())
-	return db.Open(t)
-}
 
 type orderRow struct {
 	orderNo    int64
@@ -80,7 +72,7 @@ func insertTccBranch(db *sql.DB, r tccBranchRow) error {
 }
 
 func TestOrderSchema_D17_OrderNoIsBigint(t *testing.T) {
-	db := orderDB(t)
+	db := migratedDB(t, "order")
 	var dataType string
 	require.NoError(t, db.QueryRowContext(context.Background(),
 		`SELECT data_type FROM information_schema.columns
@@ -94,7 +86,7 @@ func TestOrderSchema_D17_OrderNoIsBigint(t *testing.T) {
 }
 
 func TestOrderSchema_OrderNoUnique(t *testing.T) {
-	db := orderDB(t)
+	db := migratedDB(t, "order")
 	require.NoError(t, insertOrder(db, validOrder(1)))
 
 	dup := validOrder(1)
@@ -103,7 +95,7 @@ func TestOrderSchema_OrderNoUnique(t *testing.T) {
 }
 
 func TestOrderSchema_OneOrderPerUserActivity(t *testing.T) {
-	db := orderDB(t)
+	db := migratedDB(t, "order")
 	require.NoError(t, insertOrder(db, validOrder(1)))
 
 	requireViolation(t, insertOrder(db, validOrder(2)), uniqueViolation, "uk_user_activity")
@@ -114,7 +106,7 @@ func TestOrderSchema_OneOrderPerUserActivity(t *testing.T) {
 }
 
 func TestOrderSchema_OrderAcceptsEveryStatus(t *testing.T) {
-	db := orderDB(t)
+	db := migratedDB(t, "order")
 	for status := int16(1); status <= 6; status++ {
 		r := validOrder(int64(100 + status))
 		r.userID = "u" + string(rune('a'+status))
@@ -124,7 +116,7 @@ func TestOrderSchema_OrderAcceptsEveryStatus(t *testing.T) {
 }
 
 func TestOrderSchema_OrderRejects(t *testing.T) {
-	db := orderDB(t)
+	db := migratedDB(t, "order")
 	cases := []struct {
 		name       string
 		mutate     func(*orderRow)
@@ -144,13 +136,13 @@ func TestOrderSchema_OrderRejects(t *testing.T) {
 }
 
 func TestOrderSchema_TccTransactionGidUnique(t *testing.T) {
-	db := orderDB(t)
+	db := migratedDB(t, "order")
 	require.NoError(t, insertTccTx(db, validTccTx(1)))
 	requireViolation(t, insertTccTx(db, validTccTx(1)), uniqueViolation, "uk_gid")
 }
 
 func TestOrderSchema_TccTransactionAcceptsEveryStatusAndBusiness(t *testing.T) {
-	db := orderDB(t)
+	db := migratedDB(t, "order")
 	gid := int64(100)
 	for _, business := range []string{"order_pay", "order_refund"} {
 		for status := int16(1); status <= 6; status++ {
@@ -163,7 +155,7 @@ func TestOrderSchema_TccTransactionAcceptsEveryStatusAndBusiness(t *testing.T) {
 }
 
 func TestOrderSchema_TccTransactionRejects(t *testing.T) {
-	db := orderDB(t)
+	db := migratedDB(t, "order")
 	cases := []struct {
 		name       string
 		mutate     func(*tccTxRow)
@@ -183,7 +175,7 @@ func TestOrderSchema_TccTransactionRejects(t *testing.T) {
 }
 
 func TestOrderSchema_TccBranchUniquePerAction(t *testing.T) {
-	db := orderDB(t)
+	db := migratedDB(t, "order")
 	require.NoError(t, insertTccBranch(db, validTccBranch(1)))
 	requireViolation(t, insertTccBranch(db, validTccBranch(1)), uniqueViolation, "uk_branch_action")
 
@@ -193,14 +185,14 @@ func TestOrderSchema_TccBranchUniquePerAction(t *testing.T) {
 }
 
 func TestOrderSchema_TccBranchIDFitsBarrier(t *testing.T) {
-	db := orderDB(t)
+	db := migratedDB(t, "order")
 	r := validTccBranch(1)
 	r.branchID = strings.Repeat("b", 64)
 	require.NoError(t, insertTccBranch(db, r), "branch_id must hold what seckill tcc_barrier.branch_id holds (64)")
 }
 
 func TestOrderSchema_TccBranchRejects(t *testing.T) {
-	db := orderDB(t)
+	db := migratedDB(t, "order")
 	cases := []struct {
 		name       string
 		mutate     func(*tccBranchRow)

@@ -52,7 +52,7 @@ func insertStock(db *sql.DB, r stockRow) error {
 }
 
 func TestSeckillSchema_StockRejects(t *testing.T) {
-	db := seckillDB(t)
+	db := migratedDB(t, "seckill")
 	seedActivities(t, db, 1, 2, 3)
 	cases := []struct {
 		name       string
@@ -71,7 +71,7 @@ func TestSeckillSchema_StockRejects(t *testing.T) {
 }
 
 func TestSeckillSchema_StockMoveKeepsI2(t *testing.T) {
-	db := seckillDB(t)
+	db := migratedDB(t, "seckill")
 	seedActivities(t, db, 1)
 	require.NoError(t, insertStock(db, stockRow{1, 10, 10, 0, 0}))
 
@@ -81,7 +81,7 @@ func TestSeckillSchema_StockMoveKeepsI2(t *testing.T) {
 }
 
 func TestSeckillSchema_StockOneSidedUpdateRejected(t *testing.T) {
-	db := seckillDB(t)
+	db := migratedDB(t, "seckill")
 	seedActivities(t, db, 1)
 	require.NoError(t, insertStock(db, stockRow{1, 10, 10, 0, 0}))
 
@@ -91,7 +91,7 @@ func TestSeckillSchema_StockOneSidedUpdateRejected(t *testing.T) {
 }
 
 func TestSeckillSchema_StockOnePerActivity(t *testing.T) {
-	db := seckillDB(t)
+	db := migratedDB(t, "seckill")
 	seedActivities(t, db, 1, 2)
 	require.NoError(t, insertStock(db, stockRow{1, 10, 10, 0, 0}))
 
@@ -100,18 +100,18 @@ func TestSeckillSchema_StockOnePerActivity(t *testing.T) {
 }
 
 func TestSeckillSchema_StockRequiresActivity(t *testing.T) {
-	db := seckillDB(t)
+	db := migratedDB(t, "seckill")
 	requireViolation(t, insertStock(db, stockRow{999, 10, 10, 0, 0}), foreignKeyViolation, "activity_stock_activity_id_fkey")
 }
 
 func TestSeckillSchema_ActivityUnique(t *testing.T) {
-	db := seckillDB(t)
+	db := migratedDB(t, "seckill")
 	seedActivities(t, db, 1)
 	requireViolation(t, insertActivity(db, validActivity(1)), uniqueViolation, "seckill_activity_pkey")
 }
 
 func TestSeckillSchema_ActivityAcceptsEveryLifecycleStatus(t *testing.T) {
-	db := seckillDB(t)
+	db := migratedDB(t, "seckill")
 	for status := int16(0); status <= 5; status++ {
 		r := validActivity(int64(200 + status))
 		r.status = status
@@ -120,7 +120,7 @@ func TestSeckillSchema_ActivityAcceptsEveryLifecycleStatus(t *testing.T) {
 }
 
 func TestSeckillSchema_ActivityRejects(t *testing.T) {
-	db := seckillDB(t)
+	db := migratedDB(t, "seckill")
 	cases := []struct {
 		name       string
 		mutate     func(*activityRow)

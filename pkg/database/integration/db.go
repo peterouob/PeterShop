@@ -16,9 +16,9 @@ const (
 	checkViolation      = "23514"
 )
 
-func seckillDB(t *testing.T) *sql.DB {
+func migratedDB(t *testing.T, dir string) *sql.DB {
 	t.Helper()
-	db := testkit.OpenContainer(t, "seckill")
+	db := testkit.OpenContainer(t, dir)
 	require.NoError(t, db.Migrator(t).Up())
 	return db.Open(t)
 }

@@ -19,8 +19,8 @@ func TestMigrations_UpDownUp(t *testing.T) {
 	}{
 		{dir: "user"},
 		{dir: "seckill"},
-		{dir: "order", skip: "1"},
-		{dir: "payment", skip: "1"},
+		{dir: "order"},
+		{dir: "payment"},
 	}
 
 	for _, tc := range tests {
