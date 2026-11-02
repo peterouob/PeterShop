@@ -1,49 +1,28 @@
 create table seckill_activity (
-    id bigint generated always as identity  primary key ,
-    activity_id bigint not null ,
-    product_id varchar(64) not null ,
-    total_stock int not null ,
-    price bigint not null ,
-    start_at timestamptz(3) not null ,
-    end_at timestamptz(3) not null ,
-    status smallint not null ,
-    created_at timestamptz(3) not null ,
-    updated_at timestamptz(3) not null ,
-    constraint uk_activity_id UNIQUE (activity_id)
+    activity_id bigint primary key,
+    product_id  varchar(64) not null,
+    price       bigint not null,
+    start_at    timestamptz(3) not null,
+    end_at      timestamptz(3) not null,
+    status      smallint not null,
+    created_at  timestamptz(3) not null,
+    updated_at  timestamptz(3) not null,
+    constraint ck_activity_window check (end_at > start_at),
+    constraint ck_activity_price_positive check ( price > 0 ),
+    constraint ck_activity_status CHECK ( status in (0, 1, 2, 3, 4, 5) )
 );
 
 create INDEX  idx_start ON seckill_activity (start_at, status);
 
-create table stock (
-    id bigint generated always as identity primary key ,
-    product_id varchar(64) not null ,
-    total int not null ,
-    available int not null ,
-    locked int not null ,
-    sold int not null ,
+create table activity_stock (
+    activity_id bigint primary key
+        references seckill_activity (activity_id),
+    total       int not null,
+    available   int not null,
+    locked      int not null,
+    sold        int not null,
 
-    constraint uk_product UNIQUE (product_id),
-    constraint ck_stock_non_negative CHECK ( available >= 0 and locked >= 0 and sold >= 0 ),
-    constraint ck_stock_i2 check ( total = available + locked + sold )
-);
-
-create table stock_ledger (
-    order_no bigint primary key ,
-    product_id varchar(64) not null ,
-    activity_id bigint not null ,
-    user_id varchar(64) not null ,
-    status smallint not null ,
-    created_at timestamptz(3) not null ,
-    updated_at timestamptz(3) not null
-);
-
-create index idx_activity_status on stock_ledger (activity_id, status);
-
-create table if not exists tcc_barrier (
-    id bigint generated always as identity not null ,
-    gid bigint not null ,
-    branch_id varchar(64) not null ,
-    op text not null check ( op IN ('try','confirm','cancel')),
-    created_at timestamptz(3) not null ,
-    constraint uk_barrier unique (gid, branch_id, op)
-)
+    constraint ck_stock_non_negative check (available >= 0 and locked >= 0 and sold >= 0),
+    constraint ck_stock_i2 check (total = available + locked + sold),
+    constraint ck_stock_bigger_zero check ( total > 0 )
+) with (fillfactor = 70);

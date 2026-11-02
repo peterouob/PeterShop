@@ -1,6 +1,6 @@
 //go:build integration
 
-package database
+package integration
 
 import (
 	"context"
@@ -18,7 +18,7 @@ func TestMigrations_UpDownUp(t *testing.T) {
 		skip string
 	}{
 		{dir: "user"},
-		{dir: "seckill", skip: "1"},
+		{dir: "seckill"},
 		{dir: "order", skip: "1"},
 		{dir: "payment", skip: "1"},
 	}
