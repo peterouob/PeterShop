@@ -20,5 +20,5 @@ create table tcc_barrier (
     constraint ck_barrier_op check ( op in ('try','confirm','cancel'))
 );
 
-create index idx_gid_create on tcc_barrier (gid, created_at);
+create index idx_barrier_created on tcc_barrier (created_at);
 

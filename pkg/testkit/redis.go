@@ -23,15 +23,7 @@ func OpenRedis(t testing.TB) *redis.Client {
 		t.Fatalf("testkit: start redis container: %v", err)
 	}
 
-	var addr string
-	port := 6379
-	for {
-		addr, err = ctr.PortEndpoint(ctx, fmt.Sprintf("%d/tcp", port), "")
-		if err == nil {
-			break
-		}
-		port++
-	}
+	addr, err := ctr.PortEndpoint(ctx, fmt.Sprintf("%d/tcp", 6379), "")
 
 	rdb := redis.NewClient(&redis.Options{Addr: addr})
 	t.Cleanup(func() { _ = rdb.Close() })
