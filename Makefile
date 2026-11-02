@@ -38,20 +38,29 @@ test: lint
 build:
 	go build ./...
 
-MIGRATE = PGUSER=svc_$* PGPASSWORD=$(PGPASSWORD_$*) PGDATABASE=db_$* \
-          go run ./cmd/migrate -source file://deploy/migrations/$*
+PGHOST ?= localhost
+PGPORT ?= 5433
+N      ?= 1
+
+# usage: make migrate-up | migrate-up-seckill | migrate-down-order N=2 | migrate-create-seckill NAME=add_index
+MIGRATE = migrate -path deploy/migrations/$* \
+          -database "postgres://svc_$*:$(or $(PGPASSWORD_$*),password)@$(PGHOST):$(PGPORT)/db_$*?sslmode=disable"
 
 migrate-up: $(addprefix migrate-up-,$(DBS))
 migrate-version: $(addprefix migrate-version-,$(DBS))
 
 migrate-up-%:
-	$(MIGRATE) -direction up
+	$(MIGRATE) up
 
 migrate-down-%:
-	$(MIGRATE) -direction down -steps 1
+	$(MIGRATE) down $(N)
 
 migrate-version-%:
-	@printf '%-8s ' $*; $(MIGRATE) -direction version
+	@printf '%-8s ' $*; $(MIGRATE) version
+
+migrate-create-%:
+	@test -n "$(NAME)" || (echo "usage: make migrate-create-$* NAME=xxx" && exit 1)
+	migrate create -ext sql -dir deploy/migrations/$* -seq -digits 7 $(NAME)
 
 images: $(addprefix image-,$(SERVICES))
 
