@@ -77,7 +77,8 @@ infra-down:
 	docker compose -f deploy/docker/docker-compose.yaml down -v
 
 k8s-load:
-	eval $$(minikube docker-env) && $(MAKE) images REGISTRY=$(REGISTRY) TAG=$(TAG)
+	$(MAKE) images REGISTRY=seckill TAG=local
+	$(foreach s,$(SERVICES),minikube image load seckill/$(s):local &&) true
 
 k8s-build:
 	kubectl kustomize $(K8S_OVERLAY)
@@ -93,6 +94,9 @@ k8s-update-%:
 
 k8s-update:
 	kubectl rollout restart $(SVC)
+
+k8s-redeploy: k8s-load
+	kubectl rollout restart $(SVC_ALL)
 
 gen-%:
 	protoc --proto_path=$(API_DIR)/$* \
