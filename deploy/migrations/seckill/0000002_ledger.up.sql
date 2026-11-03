@@ -2,7 +2,7 @@ create table stock_ledger (
     order_no bigint primary key ,
     activity_id bigint not null ,
     user_id varchar(64) not null ,
-    status smallint not null ,
+    status smallint not null , -- 1=Locked, 2=Sold, 3=Released
     created_at timestamptz(3) not null ,
     updated_at timestamptz(3) not null ,
     constraint ck_ledger_status check ( status in (1, 2, 3))

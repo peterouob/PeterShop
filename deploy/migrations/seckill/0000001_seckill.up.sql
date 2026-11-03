@@ -4,7 +4,7 @@ create table seckill_activity (
     price       bigint not null,
     start_at    timestamptz(3) not null,
     end_at      timestamptz(3) not null,
-    status      smallint not null,
+    status      smallint not null, -- 0=not started, 1=warm-up completed, 2=in progress, 3=closed, 4=reconciled, 5=cleared
     created_at  timestamptz(3) not null,
     updated_at  timestamptz(3) not null,
     constraint ck_activity_window check (end_at > start_at),
