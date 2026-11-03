@@ -6,14 +6,12 @@ import (
 	"fmt"
 
 	"github.com/peterouob/seckill_service/pkg/cache/rediskey"
-	"github.com/peterouob/seckill_service/service/seckill-service/internal/model"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type SeckillRepo interface {
-	DeductStock(ctx context.Context, productID, userID string) (int, error)
-	ReduceStock(ctx context.Context, productID string) error
+	DeductStock(ctx context.Context, activityID int64, userID string) (int, error)
 }
 
 type seckillRepoImpl struct {
@@ -53,8 +51,8 @@ var seckillScript = redis.NewScript(`
     end
 `)
 
-func (r *seckillRepoImpl) DeductStock(ctx context.Context, activity string, userID string) (int, error) {
-	keys := []string{rediskey.Stock(activity), rediskey.Users(activity)}
+func (r *seckillRepoImpl) DeductStock(ctx context.Context, activityID int64, userID string) (int, error) {
+	keys := []string{rediskey.Stock(activityID), rediskey.Users(activityID)}
 	result, err := seckillScript.Run(ctx, r.redisClient, keys, userID).Result()
 	if err != nil {
 		return 0, fmt.Errorf("redis script exec failed: %w", err)
@@ -62,25 +60,7 @@ func (r *seckillRepoImpl) DeductStock(ctx context.Context, activity string, user
 
 	v, ok := result.(int64)
 	if !ok {
-		return 0, fmt.Errorf("used int64 overflow %w", errors.New("used int64 overflow"))
+		return 0, errors.New("DeductStock failed: result is not int64")
 	}
 	return int(v), nil
-}
-
-// TODO: move to the order service, the seckill only let the msg to the kafka
-func (r *seckillRepoImpl) ReduceStock(ctx context.Context, productId string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&model.Stock{}).
-			Where("product_id = ? AND stock > 0", productId).
-			Update("stock", gorm.Expr("stock - 1"))
-
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return errors.New("out of stock")
-		}
-
-		return nil
-	})
 }

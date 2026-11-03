@@ -2,6 +2,7 @@ syntax = "proto3";
 
 option go_package = "../seckillproto";
 
+// TODO: need to change product_id to activity_id and changed to int64
 message SeckillRequest {
   string userId = 1;
   string productId = 2;

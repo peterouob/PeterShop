@@ -3,6 +3,7 @@ package seckillgrpc
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	"github.com/peterouob/seckill_service/api/seckillproto"
 	"github.com/peterouob/seckill_service/pkg/logger"
@@ -25,7 +26,16 @@ func (h *Handler) Seckill(ctx context.Context, in *seckillproto.SeckillRequest) 
 		return nil, status.Error(codes.InvalidArgument, "userId and productId are required")
 	}
 
-	if err := h.seckill.Buy(ctx, in.GetUserId(), in.GetProductId()); err != nil {
+	activityID, err := strconv.ParseInt(in.GetProductId(), 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid productId")
+	}
+
+	if activityID <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "invalid productId")
+	}
+
+	if err := h.seckill.Buy(ctx, activityID, in.GetUserId()); err != nil {
 		return nil, toStatus(err)
 	}
 
