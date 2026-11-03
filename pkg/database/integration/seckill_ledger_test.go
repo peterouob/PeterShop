@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -16,11 +17,26 @@ const (
 	ledgerReleased = 3
 )
 
-func insertLedger(db *sql.DB, orderNo int64, status int16, onConflict string) (sql.Result, error) {
+type ledgerRow struct {
+	orderNo    int64
+	activityID int64
+	userID     string
+	status     int16
+}
+
+func ledgerFor(orderNo int64, status int16) ledgerRow {
+	return ledgerRow{orderNo: orderNo, activityID: 1, userID: fmt.Sprintf("u%d", orderNo), status: status}
+}
+
+func insertLedgerRow(db *sql.DB, r ledgerRow, onConflict string) (sql.Result, error) {
 	return db.ExecContext(context.Background(),
 		`INSERT INTO stock_ledger (order_no, activity_id, user_id, status, created_at, updated_at)
-		 VALUES ($1, 1, 'u1', $2, now(), now()) `+onConflict,
-		orderNo, status)
+		 VALUES ($1, $2, $3, $4, now(), now()) `+onConflict,
+		r.orderNo, r.activityID, r.userID, r.status)
+}
+
+func insertLedger(db *sql.DB, orderNo int64, status int16, onConflict string) (sql.Result, error) {
+	return insertLedgerRow(db, ledgerFor(orderNo, status), onConflict)
 }
 
 func requireAffected(t *testing.T, res sql.Result, want int64) {
@@ -35,7 +51,9 @@ func TestSeckillSchema_LedgerOneRowPerOrder(t *testing.T) {
 	_, err := insertLedger(db, 1, ledgerLocked, "")
 	require.NoError(t, err)
 
-	_, err = insertLedger(db, 1, ledgerLocked, "")
+	sameOrderOtherUser := ledgerFor(1, ledgerLocked)
+	sameOrderOtherUser.userID = "someone-else"
+	_, err = insertLedgerRow(db, sameOrderOtherUser, "")
 	requireViolation(t, err, uniqueViolation, "stock_ledger_pkey")
 
 	res, err := insertLedger(db, 1, ledgerLocked, "ON CONFLICT (order_no) DO NOTHING")

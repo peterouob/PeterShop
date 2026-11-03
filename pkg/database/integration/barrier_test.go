@@ -70,7 +70,7 @@ func TestBarrier_BranchIDHoldsWhatCoordinatorHolds(t *testing.T) {
 
 func TestHotInsertTablesHaveNoForeignKey(t *testing.T) {
 	cases := map[string][]string{
-		"seckill": {"stock_ledger", "tcc_barrier"},
+		"seckill": {"stock_ledger", "tcc_barrier", "outbox"},
 		"order":   {"orders", "tcc_transaction", "tcc_branch"},
 		"payment": {"payment_freeze", "payment_flow", "tcc_barrier"},
 	}
