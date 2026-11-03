@@ -38,19 +38,22 @@ func producerConfig(k config.Kafka) (*sarama.Config, error) {
 
 	c := sarama.NewConfig()
 	c.ClientID = k.ClientID
-	c.Producer.RequiredAcks = acks
+	c.Net.MaxOpenRequests = 1
 
 	c.Producer.Idempotent = true
 	// wait for the ack
 	c.Producer.RequiredAcks = sarama.WaitForAll
-	c.Producer.Retry.Max = 3
 	c.Producer.Return.Successes = true
 	c.Producer.Return.Errors = true
 	c.Producer.Retry.Max = k.MaxRetries
 	c.Producer.Retry.Backoff = k.RetryBackoff
 	c.Producer.Compression = sarama.CompressionZSTD
 	c.Producer.Partitioner = sarama.NewHashPartitioner
-	c.Net.MaxOpenRequests = 5
+
+	if err := c.Validate(); err != nil {
+		return nil, fmt.Errorf("kafka: validate config: %w", err)
+	}
+
 	return c, nil
 }
 
