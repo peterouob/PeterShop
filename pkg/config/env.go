@@ -12,11 +12,12 @@ import (
 type Section string
 
 const (
-	SectionPostgres Section = "postgres"
-	SectionRedis    Section = "redis"
-	SectionKafka    Section = "kafka"
-	SectionEtcd     Section = "etcd"
-	SectionJWT      Section = "jwt"
+	SectionPostgres  Section = "postgres"
+	SectionRedis     Section = "redis"
+	SectionKafka     Section = "kafka"
+	SectionEtcd      Section = "etcd"
+	SectionJWT       Section = "jwt"
+	SectionUpstreams Section = "upstreams"
 )
 
 type loader struct {
@@ -37,7 +38,7 @@ func (l *loader) needs(s Section) bool {
 	return ok
 }
 
-func (l *loader) secret(s Section, key string) string {
+func (l *loader) requiredIn(s Section, key string) string {
 	if l.needs(s) {
 		return l.required(key)
 	}
@@ -100,10 +101,13 @@ func (l *loader) duration(key string, fallback time.Duration) time.Duration {
 	return d
 }
 
-func (l *loader) list(key string, fallback []string) []string {
+func (l *loader) listIn(s Section, key string) []string {
 	v, ok := l.lookup(key)
 	if !ok {
-		return fallback
+		if l.needs(s) {
+			l.fail(key, "is required but not set")
+		}
+		return nil
 	}
 	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))

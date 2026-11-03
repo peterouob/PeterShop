@@ -14,7 +14,9 @@ import (
 const serviceName = "api-gateway"
 
 var app = fx.Options(
-	fx.Provide(func() (*config.Config, error) { return config.Load(serviceName, config.SectionJWT) }),
+	fx.Provide(func() (*config.Config, error) {
+		return config.Load(serviceName, config.SectionJWT, config.SectionUpstreams)
+	}),
 	auth.Module,
 	transport.HTTPServerModule,
 	client.Module,

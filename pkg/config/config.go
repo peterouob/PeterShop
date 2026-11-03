@@ -97,24 +97,24 @@ func Load(serviceName string, sections ...Section) (*Config, error) {
 			HTTPAddr: l.str("HTTP_ADDR", ":8080"),
 		},
 		Postgres: Postgres{
-			Host:            l.str("PGHOST", "127.0.0.1"),
+			Host:            l.requiredIn(SectionPostgres, "PGHOST"),
 			Port:            l.int("PGPORT", 5432),
-			User:            l.secret(SectionPostgres, "PGUSER"),
-			Password:        l.secret(SectionPostgres, "PGPASSWORD"),
-			Database:        l.secret(SectionPostgres, "PGDATABASE"),
+			User:            l.requiredIn(SectionPostgres, "PGUSER"),
+			Password:        l.requiredIn(SectionPostgres, "PGPASSWORD"),
+			Database:        l.requiredIn(SectionPostgres, "PGDATABASE"),
 			Params:          l.str("PG_PARAMS", "sslmode=disable"),
 			MaxOpenConns:    l.int("PG_MAX_OPEN_CONNS", 20),
 			MaxIdleConns:    l.int("PG_MAX_IDLE_CONNS", 10),
 			ConnMaxLifetime: l.duration("PG_CONN_MAX_LIFETIME", time.Hour),
 		},
 		Redis: Redis{
-			Addr:     l.str("REDIS_ADDR", "127.0.0.1:6379"),
+			Addr:     l.requiredIn(SectionRedis, "REDIS_ADDR"),
 			Password: l.str("REDIS_PASSWORD", ""),
 			DB:       l.int("REDIS_DB", 0),
 			PoolSize: l.int("REDIS_POOL_SIZE", 64),
 		},
 		Kafka: Kafka{
-			Brokers:      l.list("KAFKA_BROKERS", []string{"127.0.0.1:9092"}),
+			Brokers:      l.listIn(SectionKafka, "KAFKA_BROKERS"),
 			ClientID:     l.str("KAFKA_CLIENT_ID", serviceName),
 			RequiredAcks: l.int("KAFKA_REQUIRED_ACKS", -1),
 			MaxRetries:   l.int("KAFKA_MAX_RETRIES", 5),
@@ -123,17 +123,17 @@ func Load(serviceName string, sections ...Section) (*Config, error) {
 			FlushTimeout: l.duration("KAFKA_FLUSH_TIMEOUT", 200*time.Millisecond),
 		},
 		Etcd: Etcd{
-			Endpoints:   l.list("ETCD_ENDPOINTS", []string{"127.0.0.1:2379"}),
+			Endpoints:   l.listIn(SectionEtcd, "ETCD_ENDPOINTS"),
 			DialTimeout: l.duration("ETCD_DIAL_TIMEOUT", 5*time.Second),
 			LeaseTTL:    l.duration("ETCD_LEASE_TTL", 10*time.Second),
 		},
 		JWT: JWT{
-			Secret: l.secret(SectionJWT, "JWT_SECRET"),
+			Secret: l.requiredIn(SectionJWT, "JWT_SECRET"),
 			TTL:    l.duration("JWT_TTL", 2*time.Hour),
 		},
 		Upstreams: Upstreams{
-			User:    l.str("UPSTREAM_USER_ADDR", "dns:///127.0.0.1:50051"),
-			Seckill: l.str("UPSTREAM_SECKILL_ADDR", "dns:///127.0.0.1:50052"),
+			User:    l.requiredIn(SectionUpstreams, "UPSTREAM_USER_ADDR"),
+			Seckill: l.requiredIn(SectionUpstreams, "UPSTREAM_SECKILL_ADDR"),
 		},
 	}
 

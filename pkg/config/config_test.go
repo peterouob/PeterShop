@@ -90,7 +90,7 @@ func TestLoad_PostgresURLEscapesPassword(t *testing.T) {
 	assert.Equal(t, "pgx5://svc_seckill:p%40ss%2Fw%3Ard@db:5432/db_seckill?sslmode=disable", p.URL())
 }
 
-var addrKeys = []string{"PGHOST", "REDIS_ADDR", "KAFKA_BROKERS", "ETCD_ENDPOINTS"}
+var addrKeys = []string{"PGHOST", "REDIS_ADDR", "KAFKA_BROKERS", "ETCD_ENDPOINTS", "UPSTREAM_USER_ADDR", "UPSTREAM_SECKILL_ADDR"}
 
 func setSecrets(t *testing.T) {
 	t.Helper()
@@ -136,13 +136,17 @@ func TestLoad_AddrFromEnv(t *testing.T) {
 	t.Setenv("REDIS_ADDR", "redis:6379")
 	t.Setenv("KAFKA_BROKERS", "kafka-0:9092,kafka-1:9092")
 	t.Setenv("ETCD_ENDPOINTS", "etcd:2379")
+	t.Setenv("UPSTREAM_USER_ADDR", "dns:///user-service:50051")
+	t.Setenv("UPSTREAM_SECKILL_ADDR", "dns:///seckill-service:50052")
 
-	cfg, err := Load("svc", SectionPostgres, SectionRedis, SectionKafka, SectionEtcd)
+	cfg, err := Load("svc", SectionPostgres, SectionRedis, SectionKafka, SectionEtcd, SectionUpstreams)
 	require.NoError(t, err)
 	assert.Equal(t, "postgres", cfg.Postgres.Host)
 	assert.Equal(t, "redis:6379", cfg.Redis.Addr)
 	assert.Equal(t, []string{"kafka-0:9092", "kafka-1:9092"}, cfg.Kafka.Brokers)
 	assert.Equal(t, []string{"etcd:2379"}, cfg.Etcd.Endpoints)
+	assert.Equal(t, "dns:///user-service:50051", cfg.Upstreams.User)
+	assert.Equal(t, "dns:///seckill-service:50052", cfg.Upstreams.Seckill)
 }
 
 func TestLoad_UnneededAddrsHaveNoLocalhostFallback(t *testing.T) {
@@ -154,4 +158,15 @@ func TestLoad_UnneededAddrsHaveNoLocalhostFallback(t *testing.T) {
 	assert.Empty(t, cfg.Redis.Addr)
 	assert.Empty(t, cfg.Kafka.Brokers)
 	assert.Empty(t, cfg.Etcd.Endpoints)
+	assert.Empty(t, cfg.Upstreams.User)
+	assert.Empty(t, cfg.Upstreams.Seckill)
+}
+
+func TestLoad_UpstreamsSectionRequiresEveryUpstream(t *testing.T) {
+	unsetAll(t, addrKeys...)
+
+	_, err := Load("svc", SectionUpstreams)
+	require.Error(t, err, "api-gateway must not silently dial localhost for its upstreams")
+	assert.Contains(t, err.Error(), "UPSTREAM_USER_ADDR")
+	assert.Contains(t, err.Error(), "UPSTREAM_SECKILL_ADDR")
 }
