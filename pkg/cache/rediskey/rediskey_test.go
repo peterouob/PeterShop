@@ -7,37 +7,43 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestKeys(t *testing.T) {
-	testCase := []struct {
+func TestActivityKeys(t *testing.T) {
+	cases := []struct {
 		name string
-		fn   func(string) string
-		in   string
+		fn   func(int64) string
 		want string
 	}{
-		{name: "meta", fn: Meta, in: "p1", want: "seckill:{p1}:meta"},
-		{name: "stock", fn: Stock, in: "p1", want: "seckill:{p1}:stock"},
-		{name: "users", fn: Users, in: "p1", want: "seckill:{p1}:users"},
-		{name: "outbox", fn: Outbox, in: "p1", want: "seckill:{p1}:outbox"},
-		{name: "released", fn: Released, in: "p1", want: "seckill:{p1}:released"},
-		{name: "limit", fn: Limit, in: "u1", want: "seckill:limit:u1"},
+		{name: "meta", fn: Meta, want: "seckill:{1}:meta"},
+		{name: "stock", fn: Stock, want: "seckill:{1}:stock"},
+		{name: "users", fn: Users, want: "seckill:{1}:users"},
+		{name: "outbox", fn: Outbox, want: "seckill:{1}:outbox"},
+		{name: "released", fn: Released, want: "seckill:{1}:released"},
 	}
-
-	for _, tc := range testCase {
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, tc.fn(tc.in))
+			assert.Equal(t, tc.want, tc.fn(1))
 		})
 	}
 }
 
-func TestKeys_SameHashTag(t *testing.T) {
-	const pid = "p1"
-	keys := []string{Meta(pid), Stock(pid), Users(pid), Outbox(pid), Released(pid)}
+func TestActivityKeys_SnowflakeIDIsExactDecimal(t *testing.T) {
+	const aid int64 = 1852301234567890123
+	assert.Equal(t, "seckill:{1852301234567890123}:stock", Stock(aid))
+}
+
+func TestActivityKeys_SameHashTag(t *testing.T) {
+	const aid int64 = 42
+	keys := []string{Meta(aid), Stock(aid), Users(aid), Outbox(aid), Released(aid)}
 
 	for _, k := range keys {
 		_, rest, ok := strings.Cut(k, "{")
-		assert.True(t, ok, "%s need {", k)
+		assert.True(t, ok, "%s needs {", k)
 		tag, _, ok := strings.Cut(rest, "}")
-		assert.True(t, ok, "%s need }", k)
-		assert.Equal(t, pid, tag, k)
+		assert.True(t, ok, "%s needs }", k)
+		assert.Equal(t, "42", tag, k)
 	}
+}
+
+func TestLimitKeyIsPerUser(t *testing.T) {
+	assert.Equal(t, "seckill:limit:u1", Limit("u1"))
 }
