@@ -14,7 +14,7 @@ func OpenRedis(t testing.TB) *redis.Client {
 	t.Helper()
 	ctx := context.Background()
 
-	ctr, err := testcontainers.Run(ctx, "redis:7-alpine",
+	ctr, err := testcontainers.Run(ctx, "redis:8-alpine",
 		testcontainers.WithExposedPorts("6379/tcp"),
 		testcontainers.WithWaitStrategy(wait.ForListeningPort("6379/tcp")),
 	)
