@@ -31,8 +31,8 @@ make k8s-apply
 make migrate-up
 # go run ./cmd/migrate/main.go
 ```
-在本機跑，所以 `.env` 裡的 MySQL 位址要能連得到
-(k8s MySQL need `kubectl port-forward svc/mysql 3306:3306 -n peter-shop`)
+在本機跑，所以 `.env` 裡的 PostgreSQL 位址要能連得到
+(k8s PostgreSQL need `kubectl port-forward svc/mysql 3306:3306 -n peter-shop`)
 
 ## Step4. Forward the port
 
