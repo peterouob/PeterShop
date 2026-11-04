@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/peterouob/seckill_service/pkg/etcd/etcdtest"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/peterouob/seckill_service/pkg/idgenerate/internal/coord"
 	"github.com/peterouob/seckill_service/pkg/idgenerate/internal/coord/coordtest"
-	"github.com/peterouob/seckill_service/pkg/idgenerate/internal/etcdtest"
 )
 
 var testClient *clientv3.Client

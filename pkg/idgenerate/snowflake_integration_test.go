@@ -1,3 +1,5 @@
+//go:build integration
+
 package idgenerate
 
 import (
@@ -7,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/peterouob/seckill_service/pkg/idgenerate/internal/etcdtest"
+	"github.com/peterouob/seckill_service/pkg/etcd/etcdtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
