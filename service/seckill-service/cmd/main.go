@@ -7,6 +7,7 @@ import (
 	"github.com/peterouob/seckill_service/pkg/config"
 	"github.com/peterouob/seckill_service/pkg/database"
 	"github.com/peterouob/seckill_service/pkg/etcd"
+	"github.com/peterouob/seckill_service/pkg/idgenerate"
 	"github.com/peterouob/seckill_service/pkg/logger"
 	"github.com/peterouob/seckill_service/pkg/mq/kafka"
 	transport "github.com/peterouob/seckill_service/pkg/transport/grpc"
@@ -28,6 +29,7 @@ var seckillModule = fx.Module(serviceName,
 	fx.Invoke(func(srv *grpc.Server, h *seckillgrpc.Handler) {
 		seckillproto.RegisterSeckillServiceServer(srv, h)
 	}),
+	fx.Invoke(func(sf *idgenerate.Snowflake) {}),
 )
 
 var app = fx.Options(
@@ -37,6 +39,7 @@ var app = fx.Options(
 	database.Module,
 	cache.Module,
 	etcd.Module,
+	idgenerate.SnowflakeProvider,
 	kafka.ProducerModule,
 	transport.GrpcServerModule,
 	seckillModule,
