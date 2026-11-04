@@ -80,6 +80,10 @@ k8s-load:
 	$(MAKE) images REGISTRY=seckill TAG=local
 	$(foreach s,$(SERVICES),minikube image load seckill/$(s):local &&) true
 
+k8s-load-%:
+	$(MAKE) image-$* REGISTRY=seckill TAG=local
+	minikube image load seckill/$*:local
+
 k8s-build:
 	kubectl kustomize $(K8S_OVERLAY)
 
