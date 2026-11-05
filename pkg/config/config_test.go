@@ -170,3 +170,33 @@ func TestLoad_UpstreamsSectionRequiresEveryUpstream(t *testing.T) {
 	assert.Contains(t, err.Error(), "UPSTREAM_USER_ADDR")
 	assert.Contains(t, err.Error(), "UPSTREAM_SECKILL_ADDR")
 }
+
+func TestLoad_ZeroConnectTimeoutRejected(t *testing.T) {
+	t.Setenv("PG_CONNECT_TIMEOUT", "0s")
+
+	_, err := Load("svc")
+	require.Error(t, err, "0 would mean wait forever for a connection")
+	assert.Contains(t, err.Error(), "PG_CONNECT_TIMEOUT")
+}
+
+func TestLoad_PostgresPoolSizeValidated(t *testing.T) {
+	cases := []struct {
+		name string
+		env  map[string]string
+		key  string
+	}{
+		{"max zero", map[string]string{"PG_MAX_OPEN_CONNS": "0"}, "PG_MAX_OPEN_CONNS"},
+		{"min above max", map[string]string{"PG_MAX_OPEN_CONNS": "5", "PG_MIN_CONNS": "6"}, "PG_MIN_CONNS"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+
+			_, err := Load("svc")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.key)
+		})
+	}
+}

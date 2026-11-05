@@ -36,7 +36,7 @@ var app = fx.Options(
 	fx.Provide(func() (*config.Config, error) {
 		return config.Load(serviceName, config.SectionPostgres, config.SectionRedis, config.SectionKafka, config.SectionEtcd)
 	}),
-	database.Module,
+	database.PoolModule,
 	cache.Module,
 	etcd.Module,
 	idgenerate.SnowflakeProvider,

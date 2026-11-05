@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"time"
 )
@@ -23,15 +24,22 @@ type Service struct {
 }
 
 type Postgres struct {
-	Host            string
-	Port            int
-	User            string
-	Password        string
-	Database        string
-	Params          string
-	MaxOpenConns    int
-	MaxIdleConns    int
+	Host     string
+	Port     int
+	User     string
+	Password string
+	Database string
+	Params   string
+
+	MaxOpenConns int
+	MinConns     int
+	MaxIdleConns int
+
 	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
+
+	ConnectTimeout   time.Duration
+	StatementTimeout time.Duration
 }
 
 type Redis struct {
@@ -97,15 +105,23 @@ func Load(serviceName string, sections ...Section) (*Config, error) {
 			HTTPAddr: l.str("HTTP_ADDR", ":8080"),
 		},
 		Postgres: Postgres{
-			Host:            l.requiredIn(SectionPostgres, "PGHOST"),
-			Port:            l.int("PGPORT", 5432),
-			User:            l.requiredIn(SectionPostgres, "PGUSER"),
-			Password:        l.requiredIn(SectionPostgres, "PGPASSWORD"),
-			Database:        l.requiredIn(SectionPostgres, "PGDATABASE"),
-			Params:          l.str("PG_PARAMS", "sslmode=disable"),
-			MaxOpenConns:    l.int("PG_MAX_OPEN_CONNS", 20),
-			MaxIdleConns:    l.int("PG_MAX_IDLE_CONNS", 10),
+			Host:     l.requiredIn(SectionPostgres, "PGHOST"),
+			Port:     l.int("PGPORT", 5432),
+			User:     l.requiredIn(SectionPostgres, "PGUSER"),
+			Password: l.requiredIn(SectionPostgres, "PGPASSWORD"),
+			Database: l.requiredIn(SectionPostgres, "PGDATABASE"),
+			Params:   l.str("PG_PARAMS", "sslmode=disable"),
+
+			// the pgx default max open connections is 4
+			MaxOpenConns: l.intIn("PG_MAX_OPEN_CONNS", 20, 4, math.MaxInt32),
+			MinConns:     l.intIn("PG_MIN_CONNS", 0, 0, math.MaxInt32),
+			MaxIdleConns: l.int("PG_MAX_IDLE_CONNS", 10),
+
 			ConnMaxLifetime: l.duration("PG_CONN_MAX_LIFETIME", time.Hour),
+			ConnMaxIdleTime: l.duration("PG_CONN_MAX_IDLE_TIME", 30*time.Minute),
+
+			ConnectTimeout:   l.positiveDuration("PG_CONNECT_TIMEOUT", 5*time.Second),
+			StatementTimeout: l.duration("PG_STATEMENT_TIMEOUT", 0),
 		},
 		Redis: Redis{
 			Addr:     l.requiredIn(SectionRedis, "REDIS_ADDR"),
@@ -135,6 +151,10 @@ func Load(serviceName string, sections ...Section) (*Config, error) {
 			User:    l.requiredIn(SectionUpstreams, "UPSTREAM_USER_ADDR"),
 			Seckill: l.requiredIn(SectionUpstreams, "UPSTREAM_SECKILL_ADDR"),
 		},
+	}
+
+	if p := cfg.Postgres; p.MinConns > p.MaxOpenConns {
+		l.fail("PG_MIN_CONNS", fmt.Sprintf("must not exceed PG_MAX_OPEN_CONNS (%d), got %d", p.MaxOpenConns, p.MinConns))
 	}
 
 	if err := l.err(); err != nil {

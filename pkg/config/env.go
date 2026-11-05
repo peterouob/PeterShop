@@ -88,6 +88,14 @@ func (l *loader) int(key string, fallback int) int {
 	return n
 }
 
+func (l *loader) intIn(key string, fallback, lo, hi int) int {
+	n := l.int(key, fallback)
+	if n < lo || n > hi {
+		l.fail(key, fmt.Sprintf("must be in [%d, %d], got %d", lo, hi, n))
+	}
+	return n
+}
+
 func (l *loader) duration(key string, fallback time.Duration) time.Duration {
 	v, ok := l.lookup(key)
 	if !ok {
@@ -97,6 +105,14 @@ func (l *loader) duration(key string, fallback time.Duration) time.Duration {
 	if err != nil {
 		l.fail(key, fmt.Sprintf("expects a duration such as %q, got %q", fallback.String(), v))
 		return fallback
+	}
+	return d
+}
+
+func (l *loader) positiveDuration(key string, fallback time.Duration) time.Duration {
+	d := l.duration(key, fallback)
+	if d <= 0 {
+		l.fail(key, fmt.Sprintf("must be positive, got %s", d))
 	}
 	return d
 }

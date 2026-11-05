@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/peterouob/seckill_service/pkg/cache/rediskey"
 	"github.com/redis/go-redis/v9"
-	"gorm.io/gorm"
 )
 
 //go:embed window.lua
@@ -30,13 +30,13 @@ type SeckillRepo interface {
 
 type seckillRepoImpl struct {
 	redisClient *redis.Client
-	db          *gorm.DB
+	pool        *pgxpool.Pool
 }
 
-func NewSeckillRepo(rdb *redis.Client, db *gorm.DB) SeckillRepo {
+func NewSeckillRepo(rdb *redis.Client, pool *pgxpool.Pool) SeckillRepo {
 	return &seckillRepoImpl{
 		redisClient: rdb,
-		db:          db,
+		pool:        pool,
 	}
 }
 
