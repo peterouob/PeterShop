@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/peterouob/seckill_service/pkg/cache/rediskey"
 	"github.com/peterouob/seckill_service/pkg/testkit"
+	"github.com/peterouob/seckill_service/service/seckill-service/internal/domain"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -64,7 +66,8 @@ func (f *fixture) deduct(aid int64) int {
 
 func (f *fixture) deductAs(aid int64, userID string) int {
 	f.t.Helper()
-	got, err := f.repo.Deduct(f.ctx, aid, userID)
+	keys := []string{rediskey.Meta(aid), rediskey.Stock(aid), rediskey.Users(aid)}
+	got, err := buyScript.Run(f.ctx, f.rdb, keys, userID).Int()
 	require.NoError(f.t, err)
 	return got
 }
@@ -403,19 +406,15 @@ func TestDeduct_Concurrent(t *testing.T) {
 	for uid := range buyers {
 		wg.Go(func() {
 			<-start
-			code, err := f.repo.Deduct(f.ctx, aid, "u"+fmt.Sprintf("%d", uid))
-			if err == nil {
-				switch code {
-				case 0:
-					soldOut.Add(1)
-				case 1:
-					success.Add(1)
-				default:
-					other.Add(1)
-				}
+			err := f.repo.DeductStock(f.ctx, aid, "u"+fmt.Sprintf("%d", uid))
+			switch {
+			case err == nil:
+				success.Add(1)
+			case errors.Is(err, domain.ErrSoldOut):
+				soldOut.Add(1)
+			default:
+				other.Add(1)
 			}
-
-			assert.NoError(t, err)
 		})
 	}
 	close(start)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/peterouob/seckill_service/api/seckillproto"
 	"github.com/peterouob/seckill_service/pkg/logger"
+	"github.com/peterouob/seckill_service/service/seckill-service/internal/domain"
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/service"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -47,11 +48,11 @@ func (h *Handler) Seckill(ctx context.Context, in *seckillproto.SeckillRequest) 
 
 func toStatus(err error) error {
 	switch {
-	case errors.Is(err, service.ErrAlreadyBought):
+	case errors.Is(err, domain.ErrAlreadyBought):
 		return status.Error(codes.AlreadyExists, "you have already bought this product")
-	case errors.Is(err, service.ErrSoldOut):
+	case errors.Is(err, domain.ErrSoldOut):
 		return status.Error(codes.ResourceExhausted, "product is sold out")
-	case errors.Is(err, service.ErrNotStarted):
+	case errors.Is(err, domain.ErrNotOpen):
 		return status.Error(codes.FailedPrecondition, "the activity has not started")
 	default:
 		logger.Errorf(err, "seckill: unhandled failure")

@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	_ "embed"
-	"errors"
 	"fmt"
 	"math"
 
@@ -26,7 +25,7 @@ var releaseSrc string
 var releaseScript = redis.NewScript(releaseSrc)
 
 type SeckillRepo interface {
-	DeductStock(ctx context.Context, activityID int64, userID string) (int, error)
+	DeductStock(ctx context.Context, activityID int64, userID string) error
 }
 
 type seckillRepoImpl struct {
@@ -41,41 +40,16 @@ func NewSeckillRepo(rdb *redis.Client, db *gorm.DB) SeckillRepo {
 	}
 }
 
-var seckillScript = redis.NewScript(`
-    local stock_key = KEYS[1]
-    local users_key = KEYS[2]
-    
-    local user_id = ARGV[1]
-
-    local user_exist = redis.call('sismember', users_key, user_id)
-    if tonumber(user_exist) == 1 then
-        return 2
-    end
-
-    local stock_val = redis.call('get', stock_key)
-    if not stock_val then
-        return -1
-    end
-
-    if tonumber(stock_val) <= 0 then
-        return 0
-    else
-        redis.call('decr', stock_key)
-        redis.call('sadd', users_key, user_id)
-        return 1
-    end
-`)
-
 const failedCode = math.MinInt
 
-func (r *seckillRepoImpl) Deduct(ctx context.Context, activityID int64, userID string) (int, error) {
+func (r *seckillRepoImpl) DeductStock(ctx context.Context, activityID int64, userID string) error {
 	keys := []string{rediskey.Meta(activityID), rediskey.Stock(activityID), rediskey.Users(activityID)}
 	code, err := buyScript.Run(ctx, r.redisClient, keys, userID).Int()
 	if err != nil {
-		return failedCode, fmt.Errorf("redis script exec failed: %w", err)
+		return fmt.Errorf("redis script exec failed: %w", err)
 	}
 
-	return code, nil
+	return deductCode(code).Err()
 }
 
 func (r *seckillRepoImpl) Release(ctx context.Context, activityID int64, userID string) (int, error) {
@@ -86,18 +60,4 @@ func (r *seckillRepoImpl) Release(ctx context.Context, activityID int64, userID 
 	}
 
 	return code, nil
-}
-
-func (r *seckillRepoImpl) DeductStock(ctx context.Context, activityID int64, userID string) (int, error) {
-	keys := []string{rediskey.Stock(activityID), rediskey.Users(activityID)}
-	result, err := seckillScript.Run(ctx, r.redisClient, keys, userID).Result()
-	if err != nil {
-		return 0, fmt.Errorf("redis script exec failed: %w", err)
-	}
-
-	v, ok := result.(int64)
-	if !ok {
-		return 0, errors.New("DeductStock failed: result is not int64")
-	}
-	return int(v), nil
 }
