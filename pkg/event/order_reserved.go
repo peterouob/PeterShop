@@ -9,14 +9,9 @@ import (
 	"github.com/peterouob/seckill_service/pkg/mq"
 )
 
-const (
-	TopicSeckillOrder    = "seckill-order"
-	TopicSeckillOrderDLQ = "seckill-order-dlq"
-)
-
 var ErrPoison = errors.New("event: poison message")
 
-type OrderPlaced struct {
+type OrderReserved struct {
 	OrderNo     int64  `json:"order_no"`
 	UserID      string `json:"user_id"`
 	ProductID   string `json:"product_id"`
@@ -27,7 +22,7 @@ type OrderPlaced struct {
 
 const minCreatedAtMs = 1_000_000_000_000
 
-func (e OrderPlaced) validate() error {
+func (e OrderReserved) validate() error {
 	if e.OrderNo <= 0 {
 		return fmt.Errorf("%w: order_no must be > 0, got %d", ErrPoison, e.OrderNo)
 	}
@@ -55,20 +50,20 @@ type Poison struct {
 	Err error
 }
 
-func Decode(b []byte) (OrderPlaced, error) {
-	var orderPlaced OrderPlaced
+func Decode(b []byte) (OrderReserved, error) {
+	var orderPlaced OrderReserved
 	if err := json.Unmarshal(b, &orderPlaced); err != nil {
-		return OrderPlaced{}, fmt.Errorf("%w error: %v", ErrPoison, err)
+		return OrderReserved{}, fmt.Errorf("%w error: %v", ErrPoison, err)
 	}
 
 	if err := orderPlaced.validate(); err != nil {
-		return OrderPlaced{}, err
+		return OrderReserved{}, err
 	}
 
 	return orderPlaced, nil
 }
 
-func DecodeBatch(msgs []mq.Message) (ok []OrderPlaced, poison []Poison) {
+func DecodeBatch(msgs []mq.Message) (ok []OrderReserved, poison []Poison) {
 	for _, msg := range msgs {
 		orderPlaced, err := Decode(msg.Payload)
 		if err != nil {

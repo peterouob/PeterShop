@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func validEvent() OrderPlaced {
-	return OrderPlaced{
+func validEvent() OrderReserved {
+	return OrderReserved{
 		OrderNo:     1852301234567890123,
 		UserID:      "0190f3a2-7c4e-7b1a-9d2e-5f6a7b8c9d0e",
 		ProductID:   "p1",
