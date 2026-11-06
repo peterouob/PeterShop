@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/peterouob/seckill_service/pkg/cache/rediskey"
 	"github.com/peterouob/seckill_service/pkg/testkit"
@@ -110,15 +111,9 @@ func newBench(t *testing.T, aid int64, stock int, plan func(string) fault) *benc
 
 func (b *bench) addActivity(aid int64, stock int) {
 	b.t.Helper()
-	redisNow, err := b.rdb.Time(b.ctx).Result()
-	require.NoError(b.t, err)
-	require.NoError(b.t, b.rdb.HSet(b.ctx, rediskey.Meta(aid), map[string]any{
-		"start_ms": redisNow.Add(-time.Hour).UnixMilli(),
-		"end_ms":   redisNow.Add(time.Hour).UnixMilli(),
-	}).Err())
-	require.NoError(b.t, b.rdb.Set(b.ctx, rediskey.Stock(aid), stock, 0).Err())
+	b.seedRedis(aid, stock)
 
-	_, err = b.pool.Exec(b.ctx,
+	_, err := b.pool.Exec(b.ctx,
 		`INSERT INTO seckill_activity (activity_id, product_id, price, start_at, end_at, status, created_at, updated_at)
 		 VALUES ($1, 'p1', 100, now() - interval '1 hour', now() + interval '1 hour', 2, now(), now())`, aid)
 	require.NoError(b.t, err)
@@ -126,6 +121,17 @@ func (b *bench) addActivity(aid int64, stock int) {
 		`INSERT INTO activity_stock (activity_id, total, available, locked, sold) VALUES ($1, $2, $2, 0, 0)`,
 		aid, stock)
 	require.NoError(b.t, err)
+}
+
+func (b *bench) seedRedis(aid int64, stock int) {
+	b.t.Helper()
+	redisNow, err := b.rdb.Time(b.ctx).Result()
+	require.NoError(b.t, err)
+	require.NoError(b.t, b.rdb.HSet(b.ctx, rediskey.Meta(aid), map[string]any{
+		"start_ms": redisNow.Add(-time.Hour).UnixMilli(),
+		"end_ms":   redisNow.Add(time.Hour).UnixMilli(),
+	}).Err())
+	require.NoError(b.t, b.rdb.Set(b.ctx, rediskey.Stock(aid), stock, 0).Err())
 }
 
 type outcome struct {
@@ -155,6 +161,10 @@ type snapshot struct {
 	redisUsers  map[string]bool
 	dbAvailable int
 	ledger      map[string]int64
+	outbox      map[int64]bool
+
+	dbLocked, dbSold         int
+	ledgerLocked, ledgerSold int
 
 	dupUser int
 }
@@ -164,6 +174,7 @@ func (b *bench) snapshot(aid int64) snapshot {
 	s := snapshot{
 		redisUsers: map[string]bool{},
 		ledger:     map[string]int64{},
+		outbox:     map[int64]bool{},
 	}
 
 	stock, err := b.rdb.Get(b.ctx, rediskey.Stock(aid)).Int()
@@ -183,7 +194,8 @@ func (b *bench) snapshot(aid int64) snapshot {
 	}
 
 	err = b.pool.QueryRow(b.ctx,
-		`SELECT available from activity_stock where activity_id = $1`, aid).Scan(&s.dbAvailable)
+		`SELECT available, locked, sold FROM activity_stock WHERE activity_id = $1`, aid).
+		Scan(&s.dbAvailable, &s.dbLocked, &s.dbSold)
 	if err != nil {
 
 		b.t.Fatalf("failed to get stock from db: %v", err)
@@ -213,6 +225,26 @@ func (b *bench) snapshot(aid int64) snapshot {
 
 	if err := rows.Err(); err != nil {
 		b.t.Fatalf("snapshot: SELECT ledger: %v", err)
+	}
+
+	err = b.pool.QueryRow(b.ctx,
+		`SELECT count(*) FILTER (WHERE status = 1), count(*) FILTER (WHERE status = 2)
+		 FROM stock_ledger WHERE activity_id = $1`, aid).Scan(&s.ledgerLocked, &s.ledgerSold)
+	if err != nil {
+		b.t.Fatalf("snapshot: count ledger by status: %v", err)
+	}
+
+	outboxRows, err := b.pool.Query(b.ctx,
+		`SELECT order_no FROM outbox WHERE (payload->>'activity_id')::bigint = $1`, aid)
+	if err != nil {
+		b.t.Fatalf("snapshot: SELECT outbox: %v", err)
+	}
+	orderNos, err := pgx.CollectRows(outboxRows, pgx.RowTo[int64])
+	if err != nil {
+		b.t.Fatalf("snapshot: SELECT outbox: %v", err)
+	}
+	for _, no := range orderNos {
+		s.outbox[no] = true
 	}
 
 	return s
@@ -260,6 +292,17 @@ func assertInvariants(t *testing.T, total int, s snapshot, results []outcome) {
 		}
 	}
 
+	for user, orderNo := range s.ledger {
+		if !s.outbox[orderNo] {
+			t.Errorf("order %d reserved for %q without an outbox event (relay will never create the order)", orderNo, user)
+		}
+	}
+	for orderNo := range s.outbox {
+		if !inLedger[orderNo] {
+			t.Errorf("outbox event %d has no ledger row (an order would be created for stock never locked)", orderNo)
+		}
+	}
+
 	for user := range s.ledger {
 		if !s.redisUsers[user] {
 			t.Errorf("ledger user %q missing from redis admitted set", user)
@@ -271,10 +314,24 @@ func assertInvariants(t *testing.T, total int, s snapshot, results []outcome) {
 	}
 }
 
-func userIDs(n int) []string {
+func assertDBLedger(t *testing.T, s snapshot) {
+	t.Helper()
+	if s.dbLocked != s.ledgerLocked {
+		t.Errorf("stock counter locked=%d but ledger has %d locked rows (a counter moved without its ledger row, or the reverse)",
+			s.dbLocked, s.ledgerLocked)
+	}
+	if s.dbSold != s.ledgerSold {
+		t.Errorf("stock counter sold=%d but ledger has %d sold rows (a counter moved without its ledger row, or the reverse)",
+			s.dbSold, s.ledgerSold)
+	}
+}
+
+func userIDs(n int) []string { return userIDsFrom(0, n) }
+
+func userIDsFrom(start, n int) []string {
 	ids := make([]string, n)
 	for i := range ids {
-		ids[i] = fmt.Sprintf("u%d", i)
+		ids[i] = fmt.Sprintf("u%d", start+i)
 	}
 	return ids
 }
@@ -286,5 +343,33 @@ func everyNth(n int, f fault) func(string) fault {
 			return f
 		}
 		return faultNone
+	}
+}
+
+func repeatUser(uid string, n int) []string {
+	users := make([]string, n)
+	for i := range users {
+		users[i] = uid
+	}
+	return users
+}
+
+func countErrs(results []outcome, target error) int {
+	n := 0
+	for _, r := range results {
+		if errors.Is(r.err, target) {
+			n++
+		}
+	}
+	return n
+}
+
+func cycleFaults(faults ...fault) func(string) fault {
+	return func(uid string) fault {
+		i, err := strconv.Atoi(strings.TrimPrefix(uid, "u"))
+		if err != nil {
+			return faultNone
+		}
+		return faults[i%len(faults)]
 	}
 }

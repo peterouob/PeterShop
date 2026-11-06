@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 
 var (
 	sharedOnce sync.Once
+	dbSeq      atomic.Int64
 	shared     *TempPostgres
 	sharedErr  error
 )
@@ -89,7 +91,7 @@ func OpenContainer(t testing.TB, dir string) *TempPostgresDB {
 
 func (pg *TempPostgres) create(t testing.TB, dir string) *TempPostgresDB {
 	t.Helper()
-	name := fmt.Sprintf("it_%s_%d", sanitize(dir), time.Now().UnixNano())
+	name := fmt.Sprintf("it_%s_%d_%d", sanitize(dir), time.Now().UnixNano(), dbSeq.Add(1))
 	quoted := pgx.Identifier{name}.Sanitize()
 
 	if _, err := pg.admin.ExecContext(context.Background(), "CREATE DATABASE "+quoted); err != nil {
