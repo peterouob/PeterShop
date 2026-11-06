@@ -29,7 +29,6 @@ var seckillModule = fx.Module(serviceName,
 	fx.Invoke(func(srv *grpc.Server, h *seckillgrpc.Handler) {
 		seckillproto.RegisterSeckillServiceServer(srv, h)
 	}),
-	fx.Invoke(func(sf *idgenerate.Snowflake) {}),
 )
 
 var app = fx.Options(

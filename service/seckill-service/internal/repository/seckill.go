@@ -26,6 +26,7 @@ var releaseScript = redis.NewScript(releaseSrc)
 
 type SeckillRepo interface {
 	DeductStock(ctx context.Context, activityID int64, userID string) error
+	Reserve(ctx context.Context, orderNo, activityID int64, userID string) error
 }
 
 type seckillRepoImpl struct {

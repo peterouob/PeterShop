@@ -36,7 +36,7 @@ func (h *Handler) Seckill(ctx context.Context, in *seckillproto.SeckillRequest) 
 		return nil, status.Error(codes.InvalidArgument, "invalid productId")
 	}
 
-	if err := h.seckill.Buy(ctx, activityID, in.GetUserId()); err != nil {
+	if _, err := h.seckill.Buy(ctx, activityID, in.GetUserId()); err != nil {
 		return nil, toStatus(err)
 	}
 

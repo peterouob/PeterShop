@@ -17,9 +17,9 @@ type fakeSeckill struct {
 	activityID int64
 }
 
-func (f *fakeSeckill) Buy(_ context.Context, activityID int64, userID string) error {
+func (f *fakeSeckill) Buy(_ context.Context, activityID int64, userID string) (int64, error) {
 	f.called, f.userID, f.activityID = true, userID, activityID
-	return nil
+	return 0, nil
 }
 
 func TestSeckill_ParsesActivityIDFromProductIDField(t *testing.T) {
