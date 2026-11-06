@@ -1,25 +1,26 @@
 syntax = "proto3";
 
-option go_package = "../seckillproto";
-
-// TODO: need to change product_id to activity_id and changed to int64
-message SeckillRequest {
-  string userId = 1;
-  string productId = 2;
-  string token = 3;
-}
-
-enum BuyState {
-  SUCCESS = 0;
-  FAILED = 1;
-  WAIT = 2;
-}
-
-message SeckillResponse {
-  BuyState buyState = 1;
-  string msg = 2;
-}
+option go_package = "github.com/peterouob/seckill_service/api/seckillproto";
 
 service SeckillService {
-  rpc Seckill(SeckillRequest) returns (SeckillResponse) {};
+  rpc Buy(BuyRequest) returns(BuyResponse);
+}
+
+message BuyRequest {
+  string user_id = 1;
+  int64 activity_id = 2;
+}
+
+
+enum BuyState {
+  BUY_STATE_UNSPECIFIED = 0;
+  BUY_STATE_SUCCESS = 1;
+  BUY_STATE_FAILED = 2;
+  BUY_STATE_WAIT = 3;
+}
+
+message BuyResponse {
+  BuyState buy_state = 1;
+  string msg = 2;
+  int64 order_no = 3;
 }

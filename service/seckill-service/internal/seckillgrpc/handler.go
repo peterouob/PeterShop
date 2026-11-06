@@ -3,7 +3,6 @@ package seckillgrpc
 import (
 	"context"
 	"errors"
-	"strconv"
 
 	"github.com/peterouob/seckill_service/api/seckillproto"
 	"github.com/peterouob/seckill_service/pkg/logger"
@@ -22,27 +21,23 @@ func NewHandler(seckill service.SeckillService) *Handler {
 	return &Handler{seckill: seckill}
 }
 
-func (h *Handler) Seckill(ctx context.Context, in *seckillproto.SeckillRequest) (*seckillproto.SeckillResponse, error) {
-	if in.GetUserId() == "" || in.GetProductId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "userId and productId are required")
+func (h *Handler) Buy(ctx context.Context, in *seckillproto.BuyRequest) (*seckillproto.BuyResponse, error) {
+	if in.GetUserId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+	if in.GetActivityId() <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "activity_id must be positive")
 	}
 
-	activityID, err := strconv.ParseInt(in.GetProductId(), 10, 64)
+	orderNo, err := h.seckill.Buy(ctx, in.GetActivityId(), in.GetUserId())
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid productId")
-	}
-
-	if activityID <= 0 {
-		return nil, status.Error(codes.InvalidArgument, "invalid productId")
-	}
-
-	if _, err := h.seckill.Buy(ctx, activityID, in.GetUserId()); err != nil {
 		return nil, toStatus(err)
 	}
 
-	return &seckillproto.SeckillResponse{
-		BuyState: seckillproto.BuyState_SUCCESS,
+	return &seckillproto.BuyResponse{
+		BuyState: seckillproto.BuyState_BUY_STATE_SUCCESS,
 		Msg:      "purchase accepted",
+		OrderNo:  orderNo,
 	}, nil
 }
 
@@ -56,6 +51,10 @@ func toStatus(err error) error {
 		return status.Error(codes.ResourceExhausted, "product is sold out")
 	case errors.Is(err, domain.ErrNotOpen):
 		return status.Error(codes.FailedPrecondition, "the activity has not started")
+	case errors.Is(err, domain.ErrNotPreheated):
+		return status.Error(codes.FailedPrecondition, "the activity has not been preheated")
+	case errors.Is(err, domain.ErrSealed):
+		return status.Error(codes.FailedPrecondition, "the activity has been sealed")
 	default:
 		logger.Errorf(err, "seckill: unhandled failure")
 		return status.Error(codes.Internal, "seckill request failed")
