@@ -15,7 +15,7 @@ func TestError_CategoryAndIdentity(t *testing.T) {
 	assert.True(t, ok, "a wrapped business error is still found by AsType")
 	assert.Same(t, ErrSoldOut, got)
 	assert.ErrorIs(t, wrapped, ErrSoldOut)
-	assert.NotErrorIs(t, wrapped, ErrAlreadyBought, "outcomes are distinct even though they share a type")
+	assert.NotErrorIs(t, wrapped, ErrAlreadyAdmitted, "outcomes are distinct even though they share a type")
 
 	_, ok = errors.AsType[*Error](errors.New("conn reset"))
 	assert.False(t, ok, "system failures are not business errors")

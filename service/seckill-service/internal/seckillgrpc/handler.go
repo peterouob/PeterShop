@@ -50,6 +50,8 @@ func toStatus(err error) error {
 	switch {
 	case errors.Is(err, domain.ErrAlreadyBought):
 		return status.Error(codes.AlreadyExists, "you have already bought this product")
+	case errors.Is(err, domain.ErrAlreadyAdmitted):
+		return status.Error(codes.AlreadyExists, "request already accepted, please check your orders")
 	case errors.Is(err, domain.ErrSoldOut):
 		return status.Error(codes.ResourceExhausted, "product is sold out")
 	case errors.Is(err, domain.ErrNotOpen):

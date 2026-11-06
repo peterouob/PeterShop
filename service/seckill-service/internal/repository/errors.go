@@ -30,7 +30,7 @@ var deductErrs = map[deductCode]error{
 	deductSealed:       domain.ErrSealed,
 	deductNotPreheated: domain.ErrNotPreheated,
 	deductSoldOut:      domain.ErrSoldOut,
-	deductDuplicated:   domain.ErrAlreadyBought,
+	deductDuplicated:   domain.ErrAlreadyAdmitted,
 	deductStockLost:    ErrStockLost,
 }
 

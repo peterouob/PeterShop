@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/domain"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +16,7 @@ func TestDeductCodeErr(t *testing.T) {
 	}{
 		{1, nil},
 		{0, domain.ErrSoldOut},
-		{2, domain.ErrAlreadyBought},
+		{2, domain.ErrAlreadyAdmitted},
 		{-1, domain.ErrNotPreheated},
 		{-2, domain.ErrNotOpen},
 		{-3, domain.ErrSealed},
