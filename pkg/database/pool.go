@@ -60,16 +60,7 @@ var PoolModule = fx.Module("pgxpool",
 
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
-				var err error
-				for range 3 {
-					if err = pool.Ping(ctx); err == nil {
-						break
-					}
-					logger.Log("database not response any ...")
-					time.Sleep(500 * time.Millisecond)
-				}
-
-				if err != nil {
+				if err := pingWithRetry(ctx, pool.Ping, 3, 500*time.Millisecond); err != nil {
 					pool.Close()
 					return fmt.Errorf("pgxpool: ping: %w", err)
 				}
@@ -95,3 +86,21 @@ var PoolModule = fx.Module("pgxpool",
 		return pool, nil
 	}),
 )
+
+func pingWithRetry(ctx context.Context, ping func(context.Context) error, attempts int, wait time.Duration) error {
+	var err error
+	for i := range attempts {
+		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("%w (last ping error: %v)", ctx.Err(), err)
+			case <-time.After(wait):
+			}
+		}
+		if err = ping(ctx); err == nil {
+			return nil
+		}
+		logger.Logf("pgxpool: ping attempt %d/%d failed: %v", i+1, attempts, err)
+	}
+	return err
+}
