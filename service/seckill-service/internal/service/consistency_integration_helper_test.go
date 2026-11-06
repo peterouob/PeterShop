@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -96,7 +97,14 @@ func newBench(t *testing.T, aid int64, stock int, plan func(string) fault) *benc
 	rdb := testkit.OpenRedis(t)
 	db := testkit.OpenContainer(t, "seckill")
 	require.NoError(t, db.Migrator(t).Up())
-	pool, err := pgxpool.New(ctx, db.DSN)
+	poolCfg, err := pgxpool.ParseConfig(db.DSN)
+	require.NoError(t, err)
+	if v := os.Getenv("TEST_PG_MAXCONNS"); v != "" {
+		n, err := strconv.Atoi(v)
+		require.NoError(t, err, "TEST_PG_MAXCONNS must be an integer")
+		poolCfg.MaxConns = int32(n)
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
