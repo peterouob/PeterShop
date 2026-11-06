@@ -15,6 +15,7 @@ TARGET_user-service    := service/user-service/cmd
 TARGET_seckill-service := service/seckill-service/cmd
 
 K8S_OVERLAY ?= deploy/k8s/overlays/local
+K8S_NS      ?= peter-shop
 
 .PHONY: tidy fmt lint test build \
         migrate-up migrate-version \
@@ -94,13 +95,13 @@ k8s-delete:
 	kubectl delete -k $(K8S_OVERLAY)
 
 k8s-update-%:
-	kubectl rollout restart $(SVC_PREFIX)$*
+	kubectl -n $(K8S_NS) rollout restart $(SVC_PREFIX)$*
 
 k8s-update:
-	kubectl rollout restart $(SVC)
+	kubectl -n $(K8S_NS) rollout restart $(SVC)
 
 k8s-redeploy: k8s-load
-	kubectl rollout restart $(SVC_ALL)
+	kubectl -n $(K8S_NS) rollout restart $(SVC_ALL)
 
 gen-%:
 	protoc --proto_path=$(API_DIR)/$* \
