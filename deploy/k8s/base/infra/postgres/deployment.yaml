@@ -18,6 +18,7 @@ spec:
           ports:
             - containerPort: 5432
               name: postgres
+          args: ["-c", "wal_level=logical", "-c", "max_slot_wal_keep_size=1GB"]
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:
@@ -34,6 +35,11 @@ spec:
                 secretKeyRef:
                   name: credentials
                   key: PGPASSWORD_seckill
+            - name: PGPASSWORD_cdc
+              valueFrom:
+                secretKeyRef:
+                  name: credentials
+                  key: PGPASSWORD_cdc
             - name: PGPASSWORD_order
               valueFrom:
                 secretKeyRef:

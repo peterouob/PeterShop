@@ -37,11 +37,13 @@ services:
       - kafka
   db:
     image: postgres:17-alpine
+    command: ["-c", "wal_level=logical", "-c", "max_slot_wal_keep_size=1GB"]
     container_name: postgres
     environment:
       POSTGRES_PASSWORD: "password"
       PGPASSWORD_user: "password"
       PGPASSWORD_seckill: "password"
+      PGPASSWORD_cdc: "password"
       PGPASSWORD_order: "password"
       PGPASSWORD_payment: "password"
     volumes:

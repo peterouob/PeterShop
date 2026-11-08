@@ -151,6 +151,11 @@ func newTempPostgres(ctx context.Context) (_ *TempPostgres, err error) {
 		return nil, fmt.Errorf("ping admin db: %w", err)
 	}
 
+	if _, err = db.ExecContext(ctx, `CREATE ROLE svc_cdc NOLOGIN`); err != nil {
+		err = errors.Join(fmt.Errorf("create migration roles: %w", err), db.Close())
+		return nil, err
+	}
+
 	return &TempPostgres{
 		admin:      db,
 		adminURL:   *u,

@@ -21,7 +21,7 @@ K8S_NS      ?= peter-shop
         migrate-up migrate-version \
         images \
         infra-up infra-down \
-        k8s-load k8s-build k8s-apply k8s-delete k8s-update
+        k8s-load k8s-build k8s-apply k8s-delete k8s-update verify-cdc
 
 
 tidy:
@@ -108,3 +108,11 @@ gen-%:
 	       --go_out=$(API_DIR)/$* --go_opt=paths=source_relative \
 	       --go-grpc_out=$(API_DIR)/$* --go-grpc_opt=paths=source_relative \
 	       $(API_DIR)/$*/*.proto
+
+PSQL_SECKILL = kubectl exec -n $(K8S_NS) deploy/postgres -- psql -U postgres -d db_seckill -tAc
+
+verify-cdc:
+	@test "$$($(PSQL_SECKILL) 'SHOW wal_level')" = logical || (echo "✗ wal_level is not logical" && exit 1)
+	@test "$$($(PSQL_SECKILL) "SELECT has_table_privilege('svc_cdc','outbox','SELECT')")" = t || (echo "✗ svc_cdc cannot read outbox" && exit 1)
+	@test "$$($(PSQL_SECKILL) "SELECT has_table_privilege('svc_cdc','stock_ledger','SELECT')")" = f || (echo "✗ svc_cdc can read stock_ledger" && exit 1)
+	@echo "cdc ready"

@@ -35,6 +35,7 @@ secretGenerator:
       - POSTGRES_PASSWORD=password
       - PGPASSWORD_user=password
       - PGPASSWORD_seckill=password
+      - PGPASSWORD_cdc=password
       - PGPASSWORD_order=password
       - PGPASSWORD_payment=password
       - JWT_SECRET=local-development-secret
