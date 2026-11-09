@@ -7,7 +7,7 @@ import (
 
 	"github.com/peterouob/seckill_service/api/seckillproto"
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/domain"
-	"github.com/peterouob/seckill_service/service/seckill-service/internal/repository"
+	"github.com/peterouob/seckill_service/service/seckill-service/internal/repository/redis"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -70,7 +70,7 @@ func TestToStatus(t *testing.T) {
 		{"not preheated", domain.ErrNotPreheated, codes.FailedPrecondition},
 		{"not open", domain.ErrNotOpen, codes.FailedPrecondition},
 		{"sealed", domain.ErrSealed, codes.FailedPrecondition},
-		{"stock lost", repository.ErrStockLost, codes.Internal},
+		{"stock lost", redis.ErrStockLost, codes.Internal},
 		{"wrapped sealed", fmt.Errorf("buy: %w", domain.ErrSealed), codes.FailedPrecondition},
 	}
 	for _, tc := range cases {

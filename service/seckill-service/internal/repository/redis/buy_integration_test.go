@@ -1,6 +1,6 @@
 //go:build integration
 
-package repository
+package redis
 
 import (
 	"context"
@@ -37,7 +37,7 @@ type fixture struct {
 	t    *testing.T
 	ctx  context.Context
 	rdb  *redis.Client
-	repo *seckillRepoImpl
+	repo *StockRepo
 	now  int64
 }
 
@@ -46,7 +46,7 @@ func newFixture(t *testing.T) *fixture {
 	ctx := context.Background()
 	now, err := rdb.Time(ctx).Result()
 	require.NoError(t, err)
-	return &fixture{t: t, ctx: ctx, rdb: rdb, repo: &seckillRepoImpl{redisClient: rdb}, now: now.UnixMilli()}
+	return &fixture{t: t, ctx: ctx, rdb: rdb, repo: &StockRepo{redisClient: rdb}, now: now.UnixMilli()}
 }
 
 func (f *fixture) meta(aid int64, fields map[string]any) {
@@ -202,7 +202,7 @@ func TestDeduct_ManualSealInsideWindow(t *testing.T) {
 // window_probe.lua calls window_state with an exact now, so the boundary is tested
 // on the real Redis Lua engine without a time override in the production script.
 //
-//go:embed window_probe.lua
+//go:embed lua/window_probe.lua
 var probeSrc string
 
 func TestWindowBoundary(t *testing.T) {

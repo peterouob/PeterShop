@@ -1,4 +1,4 @@
-package repository
+package redis
 
 import (
 	"context"
@@ -6,44 +6,34 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/peterouob/seckill_service/pkg/cache/rediskey"
 	"github.com/redis/go-redis/v9"
 )
 
-//go:embed window.lua
+//go:embed lua/window.lua
 var windowSrc string
 
-//go:embed buy.lua
+//go:embed lua/buy.lua
 var buySrc string
 
 var buyScript = redis.NewScript(windowSrc + "\n" + buySrc)
 
-//go:embed release.lua
+//go:embed lua/release.lua
 var releaseSrc string
 
 var releaseScript = redis.NewScript(releaseSrc)
 
-type SeckillRepo interface {
-	DeductStock(ctx context.Context, activityID int64, userID string) error
-	Reserve(ctx context.Context, orderNo, activityID int64, userID string) error
-}
-
-type seckillRepoImpl struct {
+type StockRepo struct {
 	redisClient *redis.Client
-	pool        *pgxpool.Pool
 }
 
-func NewSeckillRepo(rdb *redis.Client, pool *pgxpool.Pool) SeckillRepo {
-	return &seckillRepoImpl{
-		redisClient: rdb,
-		pool:        pool,
-	}
+func NewStockRepo(rdb *redis.Client) *StockRepo {
+	return &StockRepo{redisClient: rdb}
 }
 
 const failedCode = math.MinInt
 
-func (r *seckillRepoImpl) DeductStock(ctx context.Context, activityID int64, userID string) error {
+func (r *StockRepo) DeductStock(ctx context.Context, activityID int64, userID string) error {
 	keys := []string{rediskey.Meta(activityID), rediskey.Stock(activityID), rediskey.Users(activityID)}
 	code, err := buyScript.Run(ctx, r.redisClient, keys, userID).Int()
 	if err != nil {
@@ -53,7 +43,7 @@ func (r *seckillRepoImpl) DeductStock(ctx context.Context, activityID int64, use
 	return deductCode(code).Err()
 }
 
-func (r *seckillRepoImpl) Release(ctx context.Context, activityID int64, userID string) (int, error) {
+func (r *StockRepo) Release(ctx context.Context, activityID int64, userID string) (int, error) {
 	keys := []string{rediskey.Stock(activityID), rediskey.Users(activityID)}
 	code, err := releaseScript.Run(ctx, r.redisClient, keys, userID).Int()
 	if err != nil {
