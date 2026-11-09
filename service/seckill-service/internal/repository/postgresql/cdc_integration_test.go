@@ -96,6 +96,38 @@ func TestCDC_FailsLoudlyOnLostSlot(t *testing.T) {
 	blocked := countByKey(b.consume(2, 10*time.Second))
 	require.NotContains(t, blocked, keyB, "B must not be delivered while the slot is lost")
 
+	b.stopDebezium()
+	b.dropSlot()
+	b.restartDebezium()
+
+	keyC := reserve(3)
+	recovered := countByKey(b.consume(3, 30*time.Second))
+	require.Equal(t, 1, recovered[keyC], "C must arrive though the new slot")
+	require.NotContains(t, recovered, keyB, "B os lost until replay runs")
+
+	keyD := reserve(4)
+	b.releaseOrder(4)
+
+	sent := b.replay(1)
+	require.Equal(t, 3, sent, "only LOCKED and SOLD orders are replayed")
+
+	msgs := b.consume(7, 15*time.Second)
+	require.Equal(t, map[string]int{keyA: 2, keyB: 1, keyC: 2, keyD: 1}, countByKey(msgs))
+
+	var fromA []event.OrderReserved
+	for _, m := range msgs {
+		if m.Key != keyA {
+			continue
+		}
+		got, err := event.Decode(m.Payload)
+		require.NoError(t, err)
+		fromA = append(fromA, got)
+	}
+	require.Len(t, fromA, 2)
+
+	assert.InDelta(t, fromA[0].CreatedAtMs, fromA[1].CreatedAtMs, 1, "replay must keep the original event time")
+	fromA[1].CreatedAtMs = fromA[0].CreatedAtMs // make sure the time format will not be effect the result
+	assert.Equal(t, fromA[0], fromA[1], "CDC and replay must produce the same event")
 }
 
 func TestCDC_RolledBackReserveEmitsNothing(t *testing.T) {

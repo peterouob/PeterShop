@@ -16,8 +16,10 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/peterouob/seckill_service/pkg/config"
 	"github.com/peterouob/seckill_service/pkg/event"
 	"github.com/peterouob/seckill_service/pkg/mq"
+	mqkafka "github.com/peterouob/seckill_service/pkg/mq/kafka"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/kafka"
@@ -199,6 +201,32 @@ func (b *cdcBench) restartDebezium() {
 func (b *cdcBench) dropSlot() {
 	_, err := b.admin.Exec(b.ctx, `SELECT pg_drop_replication_slot($1)`, cdcSlot)
 	require.NoError(b.t, err)
+}
+
+// replay runs ReplayOrders with a real producer against the bench's Kafka.
+func (b *cdcBench) replay(activityID int64) int {
+	b.t.Helper()
+	p, err := mqkafka.NewProducer(&config.Config{Kafka: config.Kafka{
+		Brokers:      b.brokers,
+		ClientID:     "cdc-bench-replay",
+		RequiredAcks: -1,
+		MaxRetries:   3,
+		RetryBackoff: 100 * time.Millisecond,
+	}})
+	require.NoError(b.t, err)
+	defer func() { _ = p.Close() }()
+
+	sent, err := ReplayOrders(b.ctx, b.pool, p, activityID, 2)
+	require.NoError(b.t, err)
+	return sent
+}
+
+// releaseOrder fakes the cancel path (PLAN_05) by moving a ledger row to Released.
+func (b *cdcBench) releaseOrder(orderNo int64) {
+	b.t.Helper()
+	tag, err := b.pool.Exec(b.ctx, `UPDATE stock_ledger SET status = 3 WHERE order_no = $1`, orderNo)
+	require.NoError(b.t, err)
+	require.EqualValues(b.t, 1, tag.RowsAffected())
 }
 
 func (b *cdcBench) seedActivity(activityID int64, productID string, price int64, stock int) {

@@ -65,6 +65,13 @@ func Decode(b []byte) (OrderReserved, error) {
 	return orderPlaced, nil
 }
 
+func Encode(o OrderReserved) ([]byte, error) {
+	if err := o.validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(o)
+}
+
 func DecodeBatch(msgs []mq.Message) (ok []OrderReserved, poison []Poison) {
 	for _, msg := range msgs {
 		orderPlaced, err := Decode(msg.Payload)
