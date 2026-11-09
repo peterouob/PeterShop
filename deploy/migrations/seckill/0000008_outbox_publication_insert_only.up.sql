@@ -1,0 +1,1 @@
+ALTER PUBLICATION seckill_outbox SET (publish = 'insert');

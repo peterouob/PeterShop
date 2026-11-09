@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: debezium
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: debezium
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: debezium
+    spec:
+      containers:
+        - name: debezium
+          image: quay.io/debezium/server:3.7.1
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PGPASSWORD_cdc
+              valueFrom:
+                secretKeyRef:
+                  name: credentials
+                  key: PGPASSWORD_cdc
+          volumeMounts:
+            - mountPath: /debezium/config
+              name: config
+          resources:
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: debezium-server

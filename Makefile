@@ -116,3 +116,10 @@ verify-cdc:
 	@test "$$($(PSQL_SECKILL) "SELECT has_table_privilege('svc_cdc','outbox','SELECT')")" = t || (echo "✗ svc_cdc cannot read outbox" && exit 1)
 	@test "$$($(PSQL_SECKILL) "SELECT has_table_privilege('svc_cdc','stock_ledger','SELECT')")" = f || (echo "✗ svc_cdc can read stock_ledger" && exit 1)
 	@echo "cdc ready"
+
+KAFKA_TOPICS = kubectl exec -n $(K8S_NS) deploy/kafka -- /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092
+
+kafka-topics:
+	$(KAFKA_TOPICS) --create --if-not-exists --topic seckill-order --partitions 3 --replication-factor 1
+	$(KAFKA_TOPICS) --create --if-not-exists --topic __debezium-heartbeat.seckill --partitions 1 --replication-factor 1
+	$(KAFKA_TOPICS) --describe --topic seckill-order

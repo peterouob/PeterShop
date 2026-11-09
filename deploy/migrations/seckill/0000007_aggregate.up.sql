@@ -1,0 +1,1 @@
+alter table outbox add column aggregate_type text not null default 'order';
