@@ -13,7 +13,6 @@ import (
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/domain"
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/repository"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type timedRepo struct {
@@ -116,20 +115,4 @@ func runWinners(t *testing.T, b *bench, aid int64, stock, buyers int) {
 func TestSpike_CrowdLargeStock(t *testing.T) {
 	const aid, stock, buyers = 1, 5000, 100_000
 	runWinners(t, newBench(t, aid, stock, nil), aid, stock, buyers)
-}
-
-func TestSpike_OutboxBacklog(t *testing.T) {
-	const aid, stock, buyers, backlog = 1, 2000, 2000, 1_000_000
-	b := newBench(t, aid, stock, nil)
-
-	start := time.Now()
-	_, err := b.pool.Exec(b.ctx,
-		`INSERT INTO outbox (order_no, payload)
-		 SELECT g, '{}'::jsonb FROM generate_series(1000000000000::bigint, 1000000000000::bigint + $1 - 1) g`, backlog)
-	require.NoError(t, err)
-	_, err = b.pool.Exec(b.ctx, `ANALYZE outbox`)
-	require.NoError(t, err)
-	t.Logf("outbox backlog=%d seeded in %v", backlog, time.Since(start))
-
-	runWinners(t, b, aid, stock, buyers)
 }

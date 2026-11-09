@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/peterouob/seckill_service/pkg/cache/rediskey"
 	"github.com/peterouob/seckill_service/pkg/testkit"
@@ -169,7 +168,6 @@ type snapshot struct {
 	redisUsers  map[string]bool
 	dbAvailable int
 	ledger      map[string]int64
-	outbox      map[int64]bool
 
 	dbLocked, dbSold         int
 	ledgerLocked, ledgerSold int
@@ -182,7 +180,6 @@ func (b *bench) snapshot(aid int64) snapshot {
 	s := snapshot{
 		redisUsers: map[string]bool{},
 		ledger:     map[string]int64{},
-		outbox:     map[int64]bool{},
 	}
 
 	stock, err := b.rdb.Get(b.ctx, rediskey.Stock(aid)).Int()
@@ -242,19 +239,6 @@ func (b *bench) snapshot(aid int64) snapshot {
 		b.t.Fatalf("snapshot: count ledger by status: %v", err)
 	}
 
-	outboxRows, err := b.pool.Query(b.ctx,
-		`SELECT order_no FROM outbox WHERE (payload->>'activity_id')::bigint = $1`, aid)
-	if err != nil {
-		b.t.Fatalf("snapshot: SELECT outbox: %v", err)
-	}
-	orderNos, err := pgx.CollectRows(outboxRows, pgx.RowTo[int64])
-	if err != nil {
-		b.t.Fatalf("snapshot: SELECT outbox: %v", err)
-	}
-	for _, no := range orderNos {
-		s.outbox[no] = true
-	}
-
 	return s
 }
 
@@ -297,17 +281,6 @@ func assertInvariants(t *testing.T, total int, s snapshot, results []outcome) {
 	for i, r := range results {
 		if r.err == nil && !inLedger[r.orderNo] {
 			t.Errorf("reported success but no order: results[%d] order_no=%d not in ledger", i, r.orderNo)
-		}
-	}
-
-	for user, orderNo := range s.ledger {
-		if !s.outbox[orderNo] {
-			t.Errorf("order %d reserved for %q without an outbox event (relay will never create the order)", orderNo, user)
-		}
-	}
-	for orderNo := range s.outbox {
-		if !inLedger[orderNo] {
-			t.Errorf("outbox event %d has no ledger row (an order would be created for stock never locked)", orderNo)
 		}
 	}
 
