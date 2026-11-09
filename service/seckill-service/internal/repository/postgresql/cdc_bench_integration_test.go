@@ -1,6 +1,6 @@
 //go:build integration && cdc
 
-package repository
+package postgresql
 
 import (
 	"bufio"
@@ -37,7 +37,7 @@ const (
 	pgImage       = "postgres:17-alpine"
 )
 
-var deployDir = filepath.Join("..", "..", "..", "..", "deploy")
+var deployDir = filepath.Join("..", "..", "..", "..", "..", "deploy")
 
 // cdcBench mirrors the minikube CDC path: real initdb.sh, real migrations,
 // real application.properties, Debezium logging in as svc_cdc.
@@ -47,7 +47,7 @@ type cdcBench struct {
 	pg      *postgres.PostgresContainer
 	admin   *pgxpool.Pool // superuser, for slot inspection only
 	pool    *pgxpool.Pool // svc_seckill, what Reserve uses in production
-	repo    *seckillRepoImpl
+	repo    *ReserveRepo
 	brokers []string // host-mapped listener
 	dbz     *testcontainers.DockerContainer
 }
@@ -92,7 +92,7 @@ func (b *cdcBench) startPostgres(nw *testcontainers.DockerNetwork) {
 	b.admin = b.openPool("postgres", "postgres", "db_seckill")
 	b.migrate()
 	b.pool = b.openPool("svc_seckill", cdcPassword, "db_seckill")
-	b.repo = &seckillRepoImpl{pool: b.pool}
+	b.repo = &ReserveRepo{pool: b.pool}
 }
 
 func (b *cdcBench) hostPort() string {

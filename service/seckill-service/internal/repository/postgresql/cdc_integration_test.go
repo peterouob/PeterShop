@@ -1,6 +1,6 @@
 //go:build integration && cdc
 
-package repository
+package postgresql
 
 import (
 	"fmt"

@@ -8,6 +8,7 @@ import (
 
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/domain"
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/repository"
+	"github.com/peterouob/seckill_service/service/seckill-service/internal/repository/postgresql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -93,7 +94,7 @@ func TestBuy_ReserveErrors(t *testing.T) {
 	}{
 		{"already bought", domain.ErrAlreadyBought, domain.ErrAlreadyBought},
 		{"sold out", domain.ErrSoldOut, domain.ErrSoldOut},
-		{"system error", fmt.Errorf("reserve: %w", repository.ErrDuplicateOrderNo), nil},
+		{"system error", fmt.Errorf("reserve: %w", postgresql.ErrDuplicateOrderNo), nil},
 	}
 
 	for _, tc := range cases {

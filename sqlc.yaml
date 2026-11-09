@@ -1,12 +1,12 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    queries: "service/seckill-service/internal/repository/queries"
+    queries: "service/seckill-service/internal/repository/postgresql/queries"
     schema: "deploy/migrations/seckill"
     gen:
       go:
         package: "seckill"
-        out: "service/seckill-service/internal/repository/db"
+        out: "service/seckill-service/internal/repository/postgresql/db"
         sql_package: "pgx/v5"
         overrides:
           - db_type: "timestamptz"

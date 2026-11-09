@@ -1,6 +1,6 @@
 //go:build integration
 
-package repository
+package postgresql
 
 import (
 	"context"
@@ -18,7 +18,7 @@ type reserveFixture struct {
 	t    *testing.T
 	ctx  context.Context
 	pool *pgxpool.Pool
-	repo *seckillRepoImpl
+	repo *ReserveRepo
 }
 
 func newReserveFixture(t *testing.T) *reserveFixture {
@@ -31,7 +31,7 @@ func newReserveFixture(t *testing.T) *reserveFixture {
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
-	return &reserveFixture{t: t, ctx: ctx, pool: pool, repo: &seckillRepoImpl{pool: pool}}
+	return &reserveFixture{t: t, ctx: ctx, pool: pool, repo: &ReserveRepo{pool: pool}}
 }
 
 func (f *reserveFixture) activity(aid int64, productID string, price int64) {
