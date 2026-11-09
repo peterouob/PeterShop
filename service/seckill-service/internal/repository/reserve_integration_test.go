@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/peterouob/seckill_service/pkg/event"
 	"github.com/peterouob/seckill_service/pkg/testkit"
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/domain"
 	"github.com/stretchr/testify/require"
@@ -60,39 +59,16 @@ func (f *reserveFixture) count(table string) int {
 	return n
 }
 
-func (f *reserveFixture) payload(orderNo int64) []byte {
-	f.t.Helper()
-	var b []byte
-	require.NoError(f.t, f.pool.QueryRow(f.ctx,
-		`SELECT payload FROM outbox WHERE order_no = $1`, orderNo).Scan(&b))
-	return b
-}
-
 func TestReserve_Success(t *testing.T) {
 	f := newReserveFixture(t)
 	f.activity(1, "p1", 100)
 	f.stock(1, 10, 0)
 
-	before := time.Now().UnixMilli()
 	err := f.repo.Reserve(f.ctx, 1001, 1, "u1")
 
 	require.NoError(t, err)
 	require.Equal(t, 1, f.count("stock_ledger"))
-	require.Equal(t, 1, f.count("outbox"))
-
-	ev, err := event.Decode(f.payload(1001))
-	require.NoError(t, err)
-
-	require.InDelta(t, before, ev.CreatedAtMs, 5000, "created_at_ms must be unix ms, close to now")
-
-	require.Equal(t, event.OrderReserved{
-		OrderNo:     1001,
-		UserID:      "u1",
-		ProductID:   "p1",
-		ActivityID:  1,
-		Amount:      100,
-		CreatedAtMs: ev.CreatedAtMs,
-	}, ev)
+	require.Zero(t, f.count("outbox"), "outbox must stay empty: Debezium reads the INSERT from WAL")
 }
 
 func TestReserve_AlreadyBought(t *testing.T) {
@@ -103,7 +79,6 @@ func TestReserve_AlreadyBought(t *testing.T) {
 
 	err := f.repo.Reserve(f.ctx, 1002, 1, "u1")
 	require.ErrorIs(t, err, domain.ErrAlreadyBought)
-	require.Equal(t, 1, f.count("outbox"))
 }
 
 func TestReserve_SoldOut(t *testing.T) {
@@ -114,7 +89,6 @@ func TestReserve_SoldOut(t *testing.T) {
 	err := f.repo.Reserve(f.ctx, 1001, 1, "u1")
 	require.ErrorIs(t, err, domain.ErrSoldOut)
 	require.Zero(t, f.count("stock_ledger"))
-	require.Zero(t, f.count("outbox"))
 }
 
 func TestReserve_NoActivity(t *testing.T) {
@@ -128,5 +102,4 @@ func TestReserve_NoActivity(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnexpectedRows)
 
 	require.Equal(t, 0, f.count("stock_ledger"))
-	require.Equal(t, 0, f.count("outbox"))
 }

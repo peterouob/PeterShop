@@ -9,6 +9,8 @@ import (
 	"github.com/peterouob/seckill_service/pkg/mq"
 )
 
+const TopicOrderReserved = "seckill-order"
+
 var ErrPoison = errors.New("event: poison message")
 
 type OrderReserved struct {

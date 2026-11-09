@@ -17,10 +17,11 @@ type ActivityStock struct {
 }
 
 type Outbox struct {
-	ID        int64
-	OrderNo   int64
-	Payload   []byte
-	CreatedAt time.Time
+	ID            int64
+	OrderNo       int64
+	Payload       []byte
+	CreatedAt     time.Time
+	AggregateType string
 }
 
 type SeckillActivity struct {

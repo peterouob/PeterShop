@@ -9,6 +9,18 @@ import (
 	"context"
 )
 
+const deleteOutBox = `-- name: DeleteOutBox :execrows
+delete from outbox where order_no = $1::bigint
+`
+
+func (q *Queries) DeleteOutBox(ctx context.Context, orderNo int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOutBox, orderNo)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertOutBox = `-- name: InsertOutBox :execrows
 
 insert into outbox (order_no, payload)

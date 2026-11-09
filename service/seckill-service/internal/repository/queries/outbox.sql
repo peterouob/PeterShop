@@ -11,3 +11,6 @@ select @order_no::bigint,
                'created_at_ms', (extract(epoch from now()) * 1000)::bigint)
 from seckill_activity sa
 where sa.activity_id = @activity_id::bigint;
+
+-- name: DeleteOutBox :execrows
+delete from outbox where order_no = @order_no::bigint;

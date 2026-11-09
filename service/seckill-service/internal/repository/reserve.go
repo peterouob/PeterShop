@@ -42,6 +42,11 @@ func (r *seckillRepoImpl) Reserve(ctx context.Context, orderNo, activityID int64
 		if err := insertOutBox(ctx, quires, insertOutBoxParams); err != nil {
 			return err
 		}
+
+		if _, err := quires.DeleteOutBox(ctx, insertOutBoxParams.OrderNo); err != nil {
+			return err
+		}
+
 		locked, err := quires.StockLock(ctx, stockLockParams)
 		if err != nil {
 			var pgErr *pgconn.PgError
