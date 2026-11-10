@@ -3,6 +3,7 @@ package event
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/peterouob/seckill_service/pkg/mq"
 	"github.com/stretchr/testify/assert"
@@ -86,4 +87,9 @@ func TestDecodeBatch_SplitsPoison(t *testing.T) {
 	require.Len(t, poison, 1)
 	assert.Equal(t, bad, poison[0].Msg, "the original message goes to the DLQ untouched")
 	assert.ErrorIs(t, poison[0].Err, ErrPoison)
+}
+
+func TestExpireAtMs_UsesReservationTime(t *testing.T) {
+	e := OrderReserved{CreatedAtMs: 1_794_000_000_000}
+	assert.Equal(t, int64(1_794_000_900_000), e.ExpireAtMs(15*time.Minute))
 }

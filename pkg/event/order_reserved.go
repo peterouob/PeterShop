@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/peterouob/seckill_service/pkg/mq"
 )
@@ -45,6 +46,10 @@ func (e OrderReserved) validate() error {
 			ErrPoison, minCreatedAtMs, e.CreatedAtMs)
 	}
 	return nil
+}
+
+func (e OrderReserved) ExpireAtMs(payTimeout time.Duration) int64 {
+	return e.CreatedAtMs + payTimeout.Milliseconds()
 }
 
 type Poison struct {
