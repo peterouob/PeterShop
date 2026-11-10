@@ -3,6 +3,7 @@ package mq
 import (
 	"context"
 	"errors"
+	"maps"
 	"time"
 )
 
@@ -29,4 +30,17 @@ type Handler func(ctx context.Context, msgs []Message) error
 type Consumer interface {
 	Start(ctx context.Context, topics []string, handle Handler) error
 	Close() error
+}
+
+func WithErrorHeader(msg Message, key string, err error) Message {
+	reason := "unknown"
+	if err != nil {
+		reason = err.Error()
+	}
+
+	m := msg
+	m.Headers = make(map[string]string, len(msg.Headers)+1)
+	maps.Copy(m.Headers, msg.Headers)
+	m.Headers[key] = reason
+	return m
 }
