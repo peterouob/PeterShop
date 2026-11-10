@@ -2,8 +2,10 @@ package event
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/peterouob/seckill_service/pkg/mq"
 	"github.com/stretchr/testify/assert"
@@ -67,6 +69,8 @@ func TestDecode_Poison(t *testing.T) {
 		{"missing product_id", mutate(func(m map[string]any) { delete(m, "product_id") })},
 		{"zero amount", mutate(func(m map[string]any) { m["amount"] = 0 })},
 		{"missing created_at_ms", mutate(func(m map[string]any) { delete(m, "created_at_ms") })},
+		{"user_id longer than varchar(64)", mutate(func(m map[string]any) { m["user_id"] = strings.Repeat("u", 65) })},
+		{"product_id longer than varchar(64)", mutate(func(m map[string]any) { m["product_id"] = strings.Repeat("p", 65) })},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -92,4 +96,80 @@ func TestDecodeBatch_SplitsPoison(t *testing.T) {
 func TestExpireAtMs_UsesReservationTime(t *testing.T) {
 	e := OrderReserved{CreatedAtMs: 1_794_000_000_000}
 	assert.Equal(t, int64(1_794_000_900_000), e.ExpireAtMs(15*time.Minute))
+}
+
+func TestDecode_IDLengthCountsCharacters(t *testing.T) {
+	cases := []struct {
+		name string
+		unit string
+	}{
+		{"CJK BMP (3 bytes/rune)", "測品"},
+		{"CJK rare BMP char (3 bytes/rune)", "堃"},
+		{"CJK supplementary plane (4 bytes/rune)", "𪚥"},
+		{"emoji (4 bytes/rune)", "😀"},
+		{"ideographic description sequence (3 runes, 3 glyphs)", "⿱⺈目"},
+		{"bopomofo with spacing tone mark (3 runes, 3 glyphs)", "ㄋㄧˇ"},
+		{"combining acute accent (2 runes, 1 glyph)", "e\u0301"},
+		{"combining caron on bopomofo (2 runes, 1 glyph)", "ㄧ\u030c"},
+		{"ZWJ emoji sequence (5 runes, 1 glyph)", "👨\u200d👩\u200d👧"},
+	}
+
+	fields := []struct {
+		name string
+		set  func(*OrderReserved, string)
+	}{
+		{"user_id", func(e *OrderReserved, s string) { e.UserID = s }},
+		{"product_id", func(e *OrderReserved, s string) { e.ProductID = s }},
+	}
+
+	for _, tc := range cases {
+		for _, f := range fields {
+			t.Run(tc.name+"/"+f.name, func(t *testing.T) {
+				t.Run("at limit is accepted", func(t *testing.T) {
+					id := repeatRunes(tc.unit, maxIDLen)
+					require.Equal(t, maxIDLen, utf8.RuneCountInString(id))
+					require.Greater(t, len(id), maxIDLen)
+
+					want, got, err := decodeWithID(t, f.set, id)
+					require.NoError(t, err)
+					require.Equal(t, want, got)
+				})
+
+				t.Run("over limit is rejected", func(t *testing.T) {
+					id := repeatRunes(tc.unit, maxIDLen+1)
+					require.Equal(t, maxIDLen+1, utf8.RuneCountInString(id))
+
+					_, _, err := decodeWithID(t, f.set, id)
+					require.ErrorIs(t, err, ErrPoison)
+					require.ErrorContains(t, err, f.name)
+				})
+			})
+		}
+	}
+}
+
+func repeatRunes(unit string, n int) string {
+	src := []rune(unit)
+	out := make([]rune, n)
+	for i := range out {
+		out[i] = src[i%len(src)]
+	}
+	return string(out)
+}
+
+func decodeWithID(
+	t *testing.T,
+	set func(*OrderReserved, string),
+	id string,
+) (want, got OrderReserved, err error) {
+	t.Helper()
+
+	want = validEvent()
+	set(&want, id)
+
+	b, err := json.Marshal(want)
+	require.NoError(t, err)
+
+	got, err = Decode(b)
+	return want, got, err
 }

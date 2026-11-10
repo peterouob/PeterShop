@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/peterouob/seckill_service/pkg/mq"
 )
 
-const TopicOrderReserved = "seckill-order"
+const (
+	TopicOrderReserved    = "seckill-order"
+	TopicOrderReservedDLQ = "seckill-order-dlq"
+)
 
 var ErrPoison = errors.New("event: poison message")
 
@@ -25,6 +29,8 @@ type OrderReserved struct {
 
 const minCreatedAtMs = 1_000_000_000_000
 
+const maxIDLen = 64
+
 func (e OrderReserved) validate() error {
 	if e.OrderNo <= 0 {
 		return fmt.Errorf("%w: order_no must be > 0, got %d", ErrPoison, e.OrderNo)
@@ -34,6 +40,12 @@ func (e OrderReserved) validate() error {
 	}
 	if strings.TrimSpace(e.ProductID) == "" {
 		return fmt.Errorf("%w: product_id is empty", ErrPoison)
+	}
+	if n := utf8.RuneCountInString(e.UserID); n > maxIDLen {
+		return fmt.Errorf("%w: user_id must be <= %d characters, got %d", ErrPoison, maxIDLen, n)
+	}
+	if n := utf8.RuneCountInString(e.ProductID); n > maxIDLen {
+		return fmt.Errorf("%w: product_id must be <= %d characters, got %d", ErrPoison, maxIDLen, n)
 	}
 	if e.ActivityID <= 0 {
 		return fmt.Errorf("%w: activity_id must be > 0, got %d", ErrPoison, e.ActivityID)
