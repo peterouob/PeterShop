@@ -221,7 +221,7 @@ func (b *cdcBench) replay(activityID int64) int {
 	return sent
 }
 
-// releaseOrder fakes the cancel path (PLAN_05) by moving a ledger row to Released.
+// releaseOrder fakes the cancel path by moving a ledger row to Released.
 func (b *cdcBench) releaseOrder(orderNo int64) {
 	b.t.Helper()
 	tag, err := b.pool.Exec(b.ctx, `UPDATE stock_ledger SET status = 3 WHERE order_no = $1`, orderNo)

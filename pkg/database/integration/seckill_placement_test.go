@@ -23,7 +23,7 @@ func TestSeckillSchema_LedgerOneWinPerUserPerActivity(t *testing.T) {
 	requireViolation(t, err, uniqueViolation, "uk_ledger_activity_user")
 
 	_, err = insertLedgerRow(db, ledgerRow{orderNo: 3, activityID: 2, userID: "u1", status: ledgerLocked}, "")
-	require.NoError(t, err, "same user in the next activity (D009)")
+	require.NoError(t, err, "same user in the next activity")
 
 	_, err = insertLedgerRow(db, ledgerRow{orderNo: 4, activityID: 1, userID: "u2", status: ledgerLocked}, "")
 	require.NoError(t, err, "another user in the same activity")
