@@ -36,11 +36,14 @@ spec:
                 secretKeyRef:
                   name: credentials
                   key: PGPASSWORD_user
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: credentials
+                  key: JWT_SECRET
           envFrom:
             - configMapRef:
                 name: infra
-            - secretRef:
-                name: credentials
           resources:
             requests:
               cpu: "250m"

@@ -24,11 +24,15 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: credentials
+                  key: JWT_SECRET
           envFrom:
             - configMapRef:
                 name: api-gateway-config
-            - secretRef:
-                name: credentials
           resources:
             requests:
               cpu: "250m"

@@ -39,8 +39,6 @@ spec:
           envFrom:
             - configMapRef:
                 name: infra
-            - secretRef:
-                name: credentials
           resources:
             requests:
               cpu: "250m"
