@@ -30,3 +30,16 @@ if kafka kafka-console-consumer.sh --topic seckill-order --from-beginning --time
 else
   echo "seckill-order has no key $order_no"; exit 1
 fi
+
+psql_order() { kubectl exec -n "$NS" deploy/postgres -- psql -U postgres -d db_order -tAc "$1"; }
+for _ in $(seq 1 20); do
+  status=$(psql_order "SELECT status FROM orders WHERE order_no = $order_no")
+  [ -n "$status" ] && break
+  sleep 0.5
+done
+echo "orders.status for $order_no:  ${status:-<none>}  (want 1 = PENDING)"
+echo "ledger.status for $order_no:  $(psql_seckill "SELECT status FROM stock_ledger WHERE order_no = $order_no")  (want 1 = LOCKED)"
+score=$(kubectl exec -n "$NS" deploy/redis -- redis-cli ZSCORE seckill:delay:order-payment-timeout "$order_no")
+echo "delay-queue score:            ${score:-<none>}  (want expire_at in ms)"
+[ "$status" = 1 ] && [ -n "$score" ] || { echo "✗ order-service did not create the order"; exit 1; }
+echo "one order, two records: ledger LOCKED + orders PENDING ($order_no)"

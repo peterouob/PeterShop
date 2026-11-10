@@ -6,13 +6,14 @@ REGISTRY       ?= peter123ouob
 TAG            ?= latest
 PLATFORM       ?= linux/$(shell go env GOARCH)
 SVC_PREFIX 	   ?= deploy/
-SVC_ALL        ?= deploy/api-gateway deploy/user-service deploy/seckill-service
+SVC_ALL        ?= deploy/api-gateway deploy/user-service deploy/seckill-service deploy/order-service
 
-SERVICES := api-gateway user-service seckill-service
+SERVICES := api-gateway user-service seckill-service order-service
 
 TARGET_api-gateway     := service/api-gateway
 TARGET_user-service    := service/user-service/cmd
 TARGET_seckill-service := service/seckill-service/cmd
+TARGET_order-service   := service/order-service/cmd
 
 K8S_OVERLAY ?= deploy/k8s/overlays/local
 K8S_NS      ?= peter-shop
@@ -122,8 +123,11 @@ KAFKA_TOPICS = kubectl exec -n $(K8S_NS) deploy/kafka -- /opt/kafka/bin/kafka-to
 
 kafka-topics:
 	$(KAFKA_TOPICS) --create --if-not-exists --topic seckill-order --partitions 3 --replication-factor 1
+	$(KAFKA_TOPICS) --create --if-not-exists --topic seckill-order-dlq --partitions 1 --replication-factor 1
 	$(KAFKA_TOPICS) --create --if-not-exists --topic __debezium-heartbeat.seckill --partitions 1 --replication-factor 1
 	$(KAFKA_TOPICS) --describe --topic seckill-order
+	$(KAFKA_TOPICS) --describe --topic seckill-order-dlq
+
 seed:
 	deploy/scripts/seed.sh $(AID) $(STOCK)
 

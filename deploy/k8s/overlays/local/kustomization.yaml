@@ -11,6 +11,8 @@ images:
     newTag: local
   - name: seckill/seckill-service
     newTag: local
+  - name: seckill/order-service
+    newTag: local
 
 replicas:
   - name: api-gateway
@@ -18,6 +20,8 @@ replicas:
   - name: user-service
     count: 1
   - name: seckill-service
+    count: 1
+  - name: order-service
     count: 1
 
 patches:

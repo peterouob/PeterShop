@@ -15,6 +15,7 @@ resources:
   - api-gateway
   - user-service
   - seckill-service
+  - order-service
 
 patches:
   - target:
