@@ -16,6 +16,7 @@ func TestActivityKeys(t *testing.T) {
 		{name: "meta", fn: Meta, want: "seckill:{1}:meta"},
 		{name: "stock", fn: Stock, want: "seckill:{1}:stock"},
 		{name: "users", fn: Users, want: "seckill:{1}:users"},
+		{name: "users rebuild", fn: UsersRebuild, want: "seckill:{1}:users:rebuild"},
 		{name: "outbox", fn: Outbox, want: "seckill:{1}:outbox"},
 		{name: "released", fn: Released, want: "seckill:{1}:released"},
 	}
@@ -33,7 +34,7 @@ func TestActivityKeys_SnowflakeIDIsExactDecimal(t *testing.T) {
 
 func TestActivityKeys_SameHashTag(t *testing.T) {
 	const aid int64 = 42
-	keys := []string{Meta(aid), Stock(aid), Users(aid), Outbox(aid), Released(aid)}
+	keys := []string{Meta(aid), Stock(aid), Users(aid), UsersRebuild(aid), Outbox(aid), Released(aid)}
 
 	for _, k := range keys {
 		_, rest, ok := strings.Cut(k, "{")
