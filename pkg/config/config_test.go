@@ -53,6 +53,7 @@ func TestLoad_BadValueNamesTheKey(t *testing.T) {
 		{"PGPORT", "abc"},
 		{"JWT_TTL", "two-hours"},
 		{"KAFKA_BROKERS", " , "},
+		{"ORDER_PAY_TIMEOUT", "0s"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.key, func(t *testing.T) {

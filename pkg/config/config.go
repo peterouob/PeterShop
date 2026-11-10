@@ -15,6 +15,7 @@ type Config struct {
 	Etcd      Etcd
 	JWT       JWT
 	Upstreams Upstreams
+	Order     Order
 }
 
 type Service struct {
@@ -68,6 +69,10 @@ type Etcd struct {
 type JWT struct {
 	Secret string
 	TTL    time.Duration
+}
+
+type Order struct {
+	PayTimeout time.Duration
 }
 
 type Upstreams struct {
@@ -146,6 +151,9 @@ func Load(serviceName string, sections ...Section) (*Config, error) {
 		JWT: JWT{
 			Secret: l.requiredIn(SectionJWT, "JWT_SECRET"),
 			TTL:    l.duration("JWT_TTL", 2*time.Hour),
+		},
+		Order: Order{
+			PayTimeout: l.positiveDuration("ORDER_PAY_TIMEOUT", 15*time.Minute),
 		},
 		Upstreams: Upstreams{
 			User:    l.requiredIn(SectionUpstreams, "UPSTREAM_USER_ADDR"),
