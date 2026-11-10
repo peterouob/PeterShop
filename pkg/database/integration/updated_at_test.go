@@ -78,7 +78,7 @@ SELECT c.table_name FROM information_schema.columns c
 				missing = append(missing, name)
 			}
 			require.NoError(t, rows.Err())
-			require.Empty(t, missing, "new tables with updated_at must get the trigger (D014)")
+			require.Empty(t, missing, "new tables with updated_at must get the trigger")
 		})
 	}
 }
@@ -87,5 +87,5 @@ func TestUpdatedAt_HotRowHasNoUserTrigger(t *testing.T) {
 	var n int
 	require.NoError(t, migratedDB(t, "seckill").QueryRowContext(context.Background(),
 		`SELECT count(*) FROM pg_trigger WHERE tgrelid = 'activity_stock'::regclass AND NOT tgisinternal`).Scan(&n))
-	require.Zero(t, n, "activity_stock is the hot row of every winner tx; no triggers (D014)")
+	require.Zero(t, n, "activity_stock is the hot row of every winner tx; no triggers")
 }

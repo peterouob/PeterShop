@@ -20,6 +20,7 @@ import (
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/domain"
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/repository"
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -263,6 +264,21 @@ func (b *bench) assertAccounting(total int, s snapshot) {
 
 func assertInvariants(t *testing.T, total int, s snapshot, results []outcome) {
 	t.Helper()
+	assertSafety(t, total, s, results)
+
+	for user := range s.ledger {
+		if !s.redisUsers[user] {
+			t.Errorf("ledger user %q missing from redis admitted set", user)
+		}
+	}
+
+	if s.redisStock > s.dbAvailable {
+		t.Errorf("redis stock %d above db available %d (redis must never hold more than db)", s.redisStock, s.dbAvailable)
+	}
+}
+
+func assertSafety(t *testing.T, total int, s snapshot, results []outcome) {
+	t.Helper()
 
 	rows := len(s.ledger) + s.dupUser
 	if rows > total {
@@ -283,16 +299,16 @@ func assertInvariants(t *testing.T, total int, s snapshot, results []outcome) {
 			t.Errorf("reported success but no order: results[%d] order_no=%d not in ledger", i, r.orderNo)
 		}
 	}
+}
 
-	for user := range s.ledger {
-		if !s.redisUsers[user] {
-			t.Errorf("ledger user %q missing from redis admitted set", user)
-		}
+func assertRebuilt(t *testing.T, s snapshot) {
+	t.Helper()
+	assert.Equal(t, s.dbAvailable, s.redisStock, "redis stock == db available")
+	ledgerUsers := make(map[string]bool, len(s.ledger))
+	for u := range s.ledger {
+		ledgerUsers[u] = true
 	}
-
-	if s.redisStock > s.dbAvailable {
-		t.Errorf("redis stock %d above db available %d (redis must never hold more than db)", s.redisStock, s.dbAvailable)
-	}
+	assert.Equal(t, ledgerUsers, s.redisUsers, "redis users == ledger users")
 }
 
 func assertDBLedger(t *testing.T, s snapshot) {
