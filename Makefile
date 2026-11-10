@@ -21,7 +21,8 @@ K8S_NS      ?= peter-shop
         migrate-up migrate-version \
         images \
         infra-up infra-down \
-        k8s-load k8s-build k8s-apply k8s-delete k8s-update verify-cdc
+        k8s-load k8s-build k8s-apply k8s-delete k8s-update verify-cdc \
+        seed bootstrap
 
 
 tidy:
@@ -123,3 +124,12 @@ kafka-topics:
 	$(KAFKA_TOPICS) --create --if-not-exists --topic seckill-order --partitions 3 --replication-factor 1
 	$(KAFKA_TOPICS) --create --if-not-exists --topic __debezium-heartbeat.seckill --partitions 1 --replication-factor 1
 	$(KAFKA_TOPICS) --describe --topic seckill-order
+seed:
+	deploy/scripts/seed.sh $(AID) $(STOCK)
+
+bootstrap:
+	kubectl -n $(K8S_NS) wait --for=condition=Available deploy/postgres deploy/kafka deploy/redis --timeout=180s
+	$(MAKE) migrate-up
+	$(MAKE) kafka-topics
+	$(MAKE) seed
+	kubectl -n $(K8S_NS) rollout restart deploy/debezium
