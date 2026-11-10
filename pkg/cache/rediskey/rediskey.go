@@ -3,8 +3,8 @@ package rediskey
 import "fmt"
 
 const (
-	DelayOrders = "seckill:delay:order-payment-timeout"
-	OutboxGroup = "relay"
+	OrderExpiryQueue = "seckill:delay:order-payment-timeout"
+	OutboxGroup      = "relay"
 )
 
 func Meta(aid int64) string      { return fmt.Sprintf("seckill:{%d}:meta", aid) }
