@@ -118,3 +118,73 @@ func TestConsistency_ConcurrentRebuilds(t *testing.T) {
 	require.NoError(t, rb.Rebuild(b.ctx, aid))
 	assertRebuilt(t, b.snapshot(aid))
 }
+
+func TestConsistency_RebuildFreesCrashedBuyers(t *testing.T) {
+	t.Parallel()
+	const aid, stock, buyers = 1, 30, 30
+	b := newBench(t, aid, stock, everyNth(3, faultCrash))
+	first := b.buyAll(userIDs(buyers), aid)
+	require.Positive(t, b.repo.crashes.Load(), "the fault plan must crash some buyers before Reserve")
+	crashes := int(b.repo.crashes.Load())
+
+	var crashed []string
+	for _, u := range userIDs(buyers) {
+		if b.repo.plan(u) == faultCrash {
+			crashed = append(crashed, u)
+		}
+	}
+	require.Len(t, crashed, crashes, "every crash maps to one planned user")
+
+	before := b.snapshot(aid)
+	require.Zero(t, before.redisStock, "redis handed out every token")
+	require.Equal(t, crashes, before.dbAvailable, "crashed tokens are lost: db still holds them while redis is empty")
+
+	stuck := b.buyAll(crashed, aid)
+	require.Equal(t, len(crashed), countErrs(stuck, domain.ErrAlreadyAdmitted), "crashed buyers are stuck as admitted without an order")
+
+	require.NoError(t, repository.NewRebuilder(b.rdb, b.pool).Rebuild(b.ctx, aid))
+	assertRebuilt(t, b.snapshot(aid))
+
+	b.repo.plan = func(string) fault { return faultNone }
+	retry := b.buyAll(crashed, aid)
+	for _, r := range retry {
+		assert.NoError(t, r.err, "rebuild must free crashed buyers to retry")
+	}
+
+	s := b.snapshot(aid)
+	assert.Len(t, s.ledger, stock, "lost tokens recovered: every unit is sold")
+	assert.Zero(t, s.dbAvailable, "no undersell after recovery")
+	assertInvariants(t, stock, s, append(append(first, stuck...), retry...))
+	assertDBLedger(t, s)
+}
+
+func TestConsistency_StockKeyLostStopsSale(t *testing.T) {
+	t.Parallel()
+	const aid, stock, early = 1, 20, 10
+	b := newBench(t, aid, stock, nil)
+	first := b.buyAll(userIDs(early), aid)
+	for _, r := range first {
+		require.NoError(t, r.err)
+	}
+	require.NoError(t, b.rdb.Del(b.ctx, rediskey.Stock(aid)).Err())
+
+	_, err := b.svc.Buy(b.ctx, aid, "late")
+	require.ErrorIs(t, err, redisrepo.ErrStockLost, "a missing stock key stops the sale instead of reading as sold out or unlimited")
+	var ledgerRows int
+	require.NoError(t, b.pool.QueryRow(b.ctx,
+		`SELECT count(*) FROM stock_ledger WHERE activity_id = $1`, aid).Scan(&ledgerRows))
+	require.Equal(t, early, ledgerRows, "a lost stock key must not reach the db")
+
+	require.NoError(t, repository.NewRebuilder(b.rdb, b.pool).Rebuild(b.ctx, aid))
+	assertRebuilt(t, b.snapshot(aid))
+
+	fresh := b.buyAll(userIDsFrom(early, stock-early), aid)
+	for _, r := range fresh {
+		assert.NoError(t, r.err, "rebuild restores the remaining stock for new buyers")
+	}
+
+	s := b.snapshot(aid)
+	assert.Len(t, s.ledger, stock, "every unit sold exactly once across the key loss")
+	assertInvariants(t, stock, s, append(first, fresh...))
+	assertDBLedger(t, s)
+}
