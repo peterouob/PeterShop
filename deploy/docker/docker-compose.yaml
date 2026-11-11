@@ -54,6 +54,8 @@ services:
       - my_bridge
   redis:
     image: redis:8-alpine
+    command: ["redis-server", "--maxmemory", "384mb", "--maxmemory-policy", "noeviction"]
+    mem_limit: 512m
     ports:
       - "6380:6379"
     networks:
