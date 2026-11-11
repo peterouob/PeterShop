@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/joho/godotenv"
-	"github.com/peterouob/seckill_service/pkg/cache"
 	"github.com/peterouob/seckill_service/pkg/config"
 	"github.com/peterouob/seckill_service/pkg/database"
 	"github.com/peterouob/seckill_service/pkg/event"
@@ -58,10 +57,9 @@ func runConsumer(lc fx.Lifecycle, c mq.Consumer, h *consumer.Handler) {
 
 var app = fx.Options(
 	fx.Provide(func() (*config.Config, error) {
-		return config.Load(serviceName, config.SectionPostgres, config.SectionRedis, config.SectionKafka)
+		return config.Load(serviceName, config.SectionPostgres, config.SectionKafka)
 	}),
 	database.PoolModule,
-	cache.Module,
 	kafka.ProducerModule,
 	kafka.ConsumerModule(consumerGroup),
 	orderModule,

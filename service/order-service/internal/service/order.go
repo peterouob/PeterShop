@@ -23,13 +23,5 @@ func NewOrderService(repo repository.OrderRepo, cfg *config.Config) OrderService
 }
 
 func (s *orderService) CreateOrders(ctx context.Context, evs []event.OrderReserved) error {
-	if err := s.repo.InsertPendingOrders(ctx, evs, s.payTimeout); err != nil {
-		return err
-	}
-
-	if err := s.repo.ScheduleExpiry(ctx, evs, s.payTimeout); err != nil {
-		return err
-	}
-
-	return nil
+	return s.repo.InsertPendingOrders(ctx, evs, s.payTimeout)
 }
