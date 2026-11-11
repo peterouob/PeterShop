@@ -11,3 +11,4 @@ func UsersRebuild(aid int64) string { return fmt.Sprintf("seckill:{%d}:users:reb
 func Outbox(aid int64) string       { return fmt.Sprintf("seckill:{%d}:outbox", aid) }
 func Released(aid int64) string     { return fmt.Sprintf("seckill:{%d}:released", aid) }
 func Limit(userID string) string    { return fmt.Sprintf("seckill:limit:%s", userID) }
+func Slots(aid int64) string        { return fmt.Sprintf("seckill:{%d}:slots", aid) }

@@ -31,7 +31,24 @@ func NewStockRepo(rdb *redis.Client) *StockRepo {
 	return &StockRepo{redisClient: rdb}
 }
 
-const failedCode = math.MinInt
+func (r *StockRepo) DeductStock(ctx context.Context, activityID int64, userID string) (int32, error) {
+	keys := []string{rediskey.Meta(activityID), rediskey.Slots(activityID), rediskey.Users(activityID)}
+	res, err := buyScript.Run(ctx, r.redisClient, keys, userID).Int64Slice()
+	if err != nil {
+		return 0, fmt.Errorf("redis script exec failed: %w", err)
+	}
+
+	if len(res) != 2 {
+		return 0, fmt.Errorf("unexpect return length, %d", len(res))
+	}
+
+	if res[0] != deductPass {
+		return 0, deductCode(res[0]).Err()
+	}
+
+	if res[1] <= 0 || res[1] > math.MaxInt32 {
+		return 0, fmt.Errorf("invalid slot %d", res[1])
+	}
 
 func (r *StockRepo) DeductStock(ctx context.Context, activityID int64, userID string) error {
 	keys := []string{rediskey.Meta(activityID), rediskey.Stock(activityID), rediskey.Users(activityID)}

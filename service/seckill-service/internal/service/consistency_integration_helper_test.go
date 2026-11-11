@@ -42,15 +42,16 @@ type faultyRepo struct {
 	dbRejects                              atomic.Int64
 }
 
-func (r *faultyRepo) DeductStock(ctx context.Context, aid int64, uid string) error {
-	if err := r.SeckillRepo.DeductStock(ctx, aid, uid); err != nil {
-		return err
+func (r *faultyRepo) DeductStock(ctx context.Context, aid int64, uid string) (int32, error) {
+	slot, err := r.SeckillRepo.DeductStock(ctx, aid, uid)
+	if err != nil {
+		return 0, err
 	}
 	if r.plan(uid) == faultRedisTimeout {
 		r.redisTimeouts.Add(1)
-		return errInjected
+		return 0, errInjected
 	}
-	return nil
+	return slot, nil
 }
 
 func (r *faultyRepo) Reserve(ctx context.Context, orderNo, aid int64, uid string, slotNo int32) error {
