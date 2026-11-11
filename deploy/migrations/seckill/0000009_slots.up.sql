@@ -50,18 +50,24 @@ on stock_ledger (activity_id, slot_no)
 where status <> 3;
 
 create function ledger_check_slot_enabled() returns trigger as $$
+    declare d timestamptz;
     begin
-        perform 1 from activity_slot
+        select disabled_at INTO d
+        from activity_slot
         where activity_id = NEW.activity_id
         and slot_no = NEW.slot_no
-        and disabled_at is null
         for share
         limit 1;
 
         if not FOUND then
-            raise exception 'slot % disabled', NEW.slot_no
-            USING errcode = '23514', constraint = 'ck_ledger_slot_enabled';
+            return NEW;
         end if;
+
+        if d is not null then
+            raise exception 'slot % disabled', NEW.slot_no
+                USING errcode = '23514', constraint = 'ck_ledger_slot_enabled';
+        end if;
+
         return NEW;
     end
 $$ language plpgsql;

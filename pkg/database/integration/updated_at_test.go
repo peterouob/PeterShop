@@ -14,30 +14,33 @@ var stale = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func TestUpdatedAt_TriggerRefreshesOnUpdate(t *testing.T) {
 	cases := []struct {
-		dir, table, insert, update string
+		dir, table, setup, insert, update string
 	}{
-		{"user", "users",
+		{"user", "users", "",
 			`INSERT INTO users (user_id, username, password, created_at, updated_at) VALUES ('u1', 'n1', 'p', now(), $1)`,
 			`UPDATE users SET username = 'n2'`},
-		{"seckill", "seckill_activity",
+		{"seckill", "seckill_activity", "",
 			`INSERT INTO seckill_activity (activity_id, product_id, price, start_at, end_at, status, created_at, updated_at)
 			 VALUES (1, 'p1', 100, now(), now() + interval '1 hour', 0, now(), $1)`,
 			`UPDATE seckill_activity SET status = 1`},
 		{"seckill", "stock_ledger",
-			`INSERT INTO stock_ledger (order_no, activity_id, user_id, status, created_at, updated_at) VALUES (1, 1, 'u1', 1, now(), $1)`,
+			`INSERT INTO seckill_activity (activity_id, product_id, price, start_at, end_at, status, created_at, updated_at)
+			 VALUES (1, 'p1', 100, now(), now() + interval '1 hour', 0, now(), now());
+			 INSERT INTO activity_slot (activity_id, slot_no) VALUES (1, 1)`,
+			`INSERT INTO stock_ledger (order_no, activity_id, user_id, status, slot_no, created_at, updated_at) VALUES (1, 1, 'u1', 1, 1, now(), $1)`,
 			`UPDATE stock_ledger SET status = 2`},
-		{"order", "orders",
+		{"order", "orders", "",
 			`INSERT INTO orders (order_no, user_id, product_id, activity_id, amount, status, expire_at, created_at, updated_at)
 			 VALUES (1, 'u1', 'p1', 1, 100, 1, now(), now(), $1)`,
 			`UPDATE orders SET status = 2`},
-		{"order", "tcc_transaction",
+		{"order", "tcc_transaction", "",
 			`INSERT INTO tcc_transaction (gid, business, order_no, amount, status, next_retry_at, created_at, updated_at)
 			 VALUES (1, 'order_pay', 1, 100, 1, now(), now(), $1)`,
 			`UPDATE tcc_transaction SET status = 2`},
-		{"order", "tcc_branch",
+		{"order", "tcc_branch", "",
 			`INSERT INTO tcc_branch (gid, branch_id, action, status, created_at, updated_at) VALUES (1, 'payment', 'try', 0, now(), $1)`,
 			`UPDATE tcc_branch SET status = 1`},
-		{"payment", "payment_freeze",
+		{"payment", "payment_freeze", "",
 			`INSERT INTO payment_freeze (gid, order_no, user_id, amount, status, created_at, updated_at) VALUES (1, 1, 'u1', 100, 1, now(), $1)`,
 			`UPDATE payment_freeze SET status = 2`},
 	}
@@ -45,6 +48,10 @@ func TestUpdatedAt_TriggerRefreshesOnUpdate(t *testing.T) {
 		t.Run(tc.dir+"/"+tc.table, func(t *testing.T) {
 			db := migratedDB(t, tc.dir)
 			ctx := context.Background()
+			if tc.setup != "" {
+				_, err := db.ExecContext(ctx, tc.setup)
+				require.NoError(t, err)
+			}
 			_, err := db.ExecContext(ctx, tc.insert, stale)
 			require.NoError(t, err)
 
@@ -81,11 +88,4 @@ SELECT c.table_name FROM information_schema.columns c
 			require.Empty(t, missing, "new tables with updated_at must get the trigger")
 		})
 	}
-}
-
-func TestUpdatedAt_HotRowHasNoUserTrigger(t *testing.T) {
-	var n int
-	require.NoError(t, migratedDB(t, "seckill").QueryRowContext(context.Background(),
-		`SELECT count(*) FROM pg_trigger WHERE tgrelid = 'activity_stock'::regclass AND NOT tgisinternal`).Scan(&n))
-	require.Zero(t, n, "activity_stock is the hot row of every winner tx; no triggers")
 }

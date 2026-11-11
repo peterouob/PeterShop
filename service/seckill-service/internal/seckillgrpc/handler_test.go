@@ -70,6 +70,9 @@ func TestToStatus(t *testing.T) {
 		{"not preheated", domain.ErrNotPreheated, codes.FailedPrecondition},
 		{"not open", domain.ErrNotOpen, codes.FailedPrecondition},
 		{"sealed", domain.ErrSealed, codes.FailedPrecondition},
+		{"slot taken", domain.ErrSlotTaken, codes.Aborted},
+		{"slot disabled", domain.ErrSlotDisabled, codes.Aborted},
+		{"slot not found", domain.ErrSlotNotFound, codes.Aborted},
 		{"stock lost", redis.ErrStockLost, codes.Internal},
 		{"wrapped sealed", fmt.Errorf("buy: %w", domain.ErrSealed), codes.FailedPrecondition},
 	}

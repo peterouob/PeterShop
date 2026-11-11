@@ -29,8 +29,8 @@ func (r *SnapshotRepo) LoadSnapshot(ctx context.Context, activityID int64) (doma
 		return domain.ActivitySnapshot{}, err
 	}
 
-	if !row.Available.Valid {
-		return domain.ActivitySnapshot{}, fmt.Errorf("snapshot: activity %d has no stock row", activityID)
+	if row.SlotTotal == 0 {
+		return domain.ActivitySnapshot{}, fmt.Errorf("snapshot: activity %d has no slots row", activityID)
 	}
 
 	return domain.ActivitySnapshot{
@@ -38,7 +38,7 @@ func (r *SnapshotRepo) LoadSnapshot(ctx context.Context, activityID int64) (doma
 		StartAt:    row.StartAt,
 		EndAt:      row.EndAt,
 		Sealed:     row.Status >= 3,
-		Available:  int64(row.Available.Int32),
+		Available:  int64(row.Available),
 		Users:      row.UserIds,
 	}, nil
 }

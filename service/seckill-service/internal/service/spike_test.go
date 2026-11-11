@@ -21,9 +21,9 @@ type timedRepo struct {
 	reserves []time.Duration
 }
 
-func (r *timedRepo) Reserve(ctx context.Context, orderNo, aid int64, uid string) error {
+func (r *timedRepo) Reserve(ctx context.Context, orderNo, aid int64, uid string, slotNo int32) error {
 	start := time.Now()
-	err := r.SeckillRepo.Reserve(ctx, orderNo, aid, uid)
+	err := r.SeckillRepo.Reserve(ctx, orderNo, aid, uid, slotNo)
 	d := time.Since(start)
 	r.mu.Lock()
 	r.reserves = append(r.reserves, d)

@@ -134,7 +134,7 @@ func (b *cdcBench) reserveBatch(pool *pgxpool.Pool, activityID int64, firstOrder
 			for i := int(next.Add(1) - 1); i < walSpikeOrders; i = int(next.Add(1) - 1) {
 				orderNo := firstOrder + i
 				t0 := time.Now()
-				errs[i] = repo.Reserve(b.ctx, int64(orderNo), activityID, "u"+strconv.Itoa(orderNo))
+				errs[i] = repo.Reserve(b.ctx, int64(orderNo), activityID, "u"+strconv.Itoa(orderNo), int32(i+1))
 				lat[i] = time.Since(t0)
 			}
 		})

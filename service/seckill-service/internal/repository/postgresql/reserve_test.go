@@ -21,12 +21,14 @@ func TestClassifyReserveErr(t *testing.T) {
 		in   error
 		want error // nil = no sentinel expected, only "is an error"
 	}{
-		{"already bought", fmt.Errorf("stock lock: %w", pgErr("23505", "uk_ledger_activity_user")), domain.ErrAlreadyBought},
-		{"sold out", fmt.Errorf("stock lock: %w", pgErr("23514", "ck_stock_non_negative")), domain.ErrSoldOut},
+		{"already bought", fmt.Errorf("insert ledger: %w", pgErr("23505", "uk_ledger_activity_user")), domain.ErrAlreadyBought},
+		{"slot taken", pgErr("23505", "uk_ledger_active_slot"), domain.ErrSlotTaken},
+		{"slot not found", pgErr("23503", "fk_ledger_slot"), domain.ErrSlotNotFound},
+		{"slot disabled", pgErr("23514", "ck_ledger_slot_enabled"), domain.ErrSlotDisabled},
 		{"order_no collides in outbox", pgErr("23505", "uk_outbox_order_no"), nil},
 		{"order_no collides in ledger pk", pgErr("23505", "stock_ledger_pkey"), nil},
-		{"other check", pgErr("23514", "ck_stock_i2"), nil},
-		{"stock row missing", pgErr("P0002", ""), nil},
+		{"other check", pgErr("23514", "ck_activity_window"), nil},
+		{"not null", pgErr("23502", ""), nil},
 		{"network", errors.New("conn reset"), nil},
 	}
 	for _, tc := range cases {

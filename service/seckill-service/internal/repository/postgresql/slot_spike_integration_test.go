@@ -44,6 +44,7 @@ CREATE SCHEMA spike_slots;
 CREATE TABLE spike_slots.slots (
     activity_id bigint not null,
     slot_no     int    not null,
+    disabled_at timestamptz(3),
     primary key (activity_id, slot_no)
 );
 
@@ -66,6 +67,23 @@ CREATE INDEX idx_ledger_b_activity_status ON spike_slots.ledger_b (activity_id, 
 CREATE UNIQUE INDEX uk_ledger_b_active_slot ON spike_slots.ledger_b (activity_id, slot_no) WHERE status <> 3;
 
 CREATE TABLE spike_slots.outbox_b (LIKE public.outbox INCLUDING ALL);
+
+CREATE FUNCTION spike_slots.ledger_b_check_slot_enabled() RETURNS trigger AS $$
+BEGIN
+    PERFORM 1 FROM spike_slots.slots
+    WHERE activity_id = NEW.activity_id
+      AND slot_no = NEW.slot_no
+      AND disabled_at IS NULL
+    FOR SHARE
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'slot % disabled', NEW.slot_no
+            USING errcode = '23514', constraint = 'ck_ledger_b_slot_enabled';
+    END IF;
+    RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
 `
 
 const (
@@ -82,7 +100,22 @@ select $1::bigint,
 from seckill_activity sa
 where sa.activity_id = $2::bigint`
 	slotDeleteOutbox = `delete from spike_slots.outbox_b where order_no = $1`
-	slotInsertLedger = `
+	// The counter baseline runs against version 8, where stock_lock still exists.
+	counterInsertOutbox = `
+insert into outbox (order_no, payload)
+select $1::bigint,
+       jsonb_build_object(
+               'order_no', $1::bigint,
+               'user_id', $3::text,
+               'product_id', sa.product_id,
+               'activity_id', sa.activity_id,
+               'amount', sa.price,
+               'created_at_ms', (extract(epoch from now()) * 1000)::bigint)
+from seckill_activity sa
+where sa.activity_id = $2::bigint`
+	counterDeleteOutbox = `delete from outbox where order_no = $1`
+	counterStockLock    = `select stock_lock($1::bigint, $2::bigint, $3::varchar)`
+	slotInsertLedger    = `
 insert into spike_slots.ledger_b (order_no, activity_id, user_id, slot_no, status, locked_at, created_at, updated_at)
 values ($1, $2, $3, $4, 1, now(), now(), now())`
 )
@@ -116,7 +149,7 @@ func TestSlotSpike(t *testing.T) {
 		t.Skip("set SPIKE=1 to run the inventory model spike")
 	}
 	s := newSlotSpike(t)
-	models := []slotModel{s.counterModel(), s.slotsModel()}
+	models := []slotModel{s.counterModel(), s.slotsModel(), s.slotsTriggerModel()}
 
 	var runs []slotRun
 	for _, m := range models {
@@ -175,7 +208,8 @@ func (s *slotSpike) migrate() {
 	m, err := migrate.New("file://"+filepath.ToSlash(dir), strings.Replace(s.dsn, "postgres://", "pgx5://", 1))
 	require.NoError(s.t, err)
 	defer func() { _, _ = m.Close() }()
-	require.NoError(s.t, m.Up())
+	// The counter baseline needs activity_stock, which version 9 drops.
+	require.NoError(s.t, m.Migrate(8))
 }
 
 func (s *slotSpike) exec(sql string, args ...any) {
@@ -243,7 +277,7 @@ func (s *slotSpike) counterModel() slotModel {
 			s.settle()
 		},
 		reserve: func(ctx context.Context, pool *pgxpool.Pool, i int) error {
-			return (&ReserveRepo{pool: pool}).Reserve(ctx, int64(i+1), slotActivityID, slotUser("u", i))
+			return insertCounter(ctx, pool, int64(i+1), slotUser("u", i))
 		},
 		active: func(s *slotSpike) int {
 			ledger := s.count(`SELECT count(*) FROM stock_ledger WHERE status = 1`)
@@ -265,7 +299,19 @@ func (s *slotSpike) slotsModel() slotModel {
 	}
 }
 
+func (s *slotSpike) slotsTriggerModel() slotModel {
+	m := s.slotsModel()
+	m.name = "slots_trigger"
+	m.reset = func(s *slotSpike) {
+		s.resetSlots()
+		s.exec(`CREATE TRIGGER trg_ledger_b_slot_enabled BEFORE INSERT ON spike_slots.ledger_b
+		        FOR EACH ROW WHEN (NEW.status <> 3) EXECUTE FUNCTION spike_slots.ledger_b_check_slot_enabled()`)
+	}
+	return m
+}
+
 func (s *slotSpike) resetSlots() {
+	s.exec(`DROP TRIGGER IF EXISTS trg_ledger_b_slot_enabled ON spike_slots.ledger_b`)
 	s.seedActivity()
 	s.exec(`INSERT INTO spike_slots.slots (activity_id, slot_no) SELECT $1, g FROM generate_series(1, $2::int) g`,
 		slotActivityID, slotQuota)
@@ -312,6 +358,25 @@ func insertSlot(ctx context.Context, pool *pgxpool.Pool, orderNo int64, userID s
 		}
 		_, err := tx.Exec(ctx, slotInsertLedger, orderNo, slotActivityID, userID, slotNo)
 		return err
+	})
+}
+
+func insertCounter(ctx context.Context, pool *pgxpool.Pool, orderNo int64, userID string) error {
+	return pgx.BeginTxFunc(ctx, pool, txOpts, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, counterInsertOutbox, orderNo, slotActivityID, userID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, counterDeleteOutbox, orderNo); err != nil {
+			return err
+		}
+		var locked bool
+		if err := tx.QueryRow(ctx, counterStockLock, orderNo, slotActivityID, userID).Scan(&locked); err != nil {
+			return err
+		}
+		if !locked {
+			return fmt.Errorf("%w: order_no=%d", ErrDuplicateOrderNo, orderNo)
+		}
+		return nil
 	})
 }
 

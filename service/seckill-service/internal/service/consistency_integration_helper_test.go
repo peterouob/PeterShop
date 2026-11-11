@@ -53,23 +53,23 @@ func (r *faultyRepo) DeductStock(ctx context.Context, aid int64, uid string) err
 	return nil
 }
 
-func (r *faultyRepo) Reserve(ctx context.Context, orderNo, aid int64, uid string) error {
+func (r *faultyRepo) Reserve(ctx context.Context, orderNo, aid int64, uid string, slotNo int32) error {
 	switch r.plan(uid) {
 	case faultCrash:
 		r.crashes.Add(1)
 		return errInjected
 	case faultCommitTimeout:
-		if err := r.realReserve(ctx, orderNo, aid, uid); err != nil {
+		if err := r.realReserve(ctx, orderNo, aid, uid, slotNo); err != nil {
 			return err
 		}
 		r.commitTimeouts.Add(1)
 		return errInjected
 	}
-	return r.realReserve(ctx, orderNo, aid, uid)
+	return r.realReserve(ctx, orderNo, aid, uid, slotNo)
 }
 
-func (r *faultyRepo) realReserve(ctx context.Context, orderNo, aid int64, uid string) error {
-	err := r.SeckillRepo.Reserve(ctx, orderNo, aid, uid)
+func (r *faultyRepo) realReserve(ctx context.Context, orderNo, aid int64, uid string, slotNo int32) error {
+	err := r.SeckillRepo.Reserve(ctx, orderNo, aid, uid, slotNo)
 	if _, isBiz := errors.AsType[*domain.Error](err); isBiz {
 		r.dbRejects.Add(1)
 	}

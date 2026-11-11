@@ -8,16 +8,15 @@ import (
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/domain"
 )
 
-const NoDataFound = "P0002"
-
 var (
-	ErrUnexpectedRows   = errors.New("unexpected affected rows")
 	ErrDuplicateOrderNo = errors.New("duplicate order_no")
 )
 
 var constraintErrs = map[string]error{
 	"uk_ledger_activity_user": domain.ErrAlreadyBought,
-	"ck_stock_non_negative":   domain.ErrSoldOut,
+	"uk_ledger_active_slot":   domain.ErrSlotTaken,
+	"fk_ledger_slot":          domain.ErrSlotNotFound,
+	"ck_ledger_slot_enabled":  domain.ErrSlotDisabled,
 }
 
 func classifyReserveErr(err error) error {

@@ -22,17 +22,22 @@ type ledgerRow struct {
 	activityID int64
 	userID     string
 	status     int16
+	slotNo     int32
 }
 
 func ledgerFor(orderNo int64, status int16) ledgerRow {
-	return ledgerRow{orderNo: orderNo, activityID: 1, userID: fmt.Sprintf("u%d", orderNo), status: status}
+	return ledgerRow{orderNo: orderNo, activityID: 1, userID: fmt.Sprintf("u%d", orderNo), status: status, slotNo: int32(orderNo)}
 }
 
-func insertLedgerRow(db *sql.DB, r ledgerRow, onConflict string) (sql.Result, error) {
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func insertLedgerRow(db execer, r ledgerRow, onConflict string) (sql.Result, error) {
 	return db.ExecContext(context.Background(),
-		`INSERT INTO stock_ledger (order_no, activity_id, user_id, status, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, now(), now()) `+onConflict,
-		r.orderNo, r.activityID, r.userID, r.status)
+		`INSERT INTO stock_ledger (order_no, activity_id, user_id, status, slot_no, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, now(), now()) `+onConflict,
+		r.orderNo, r.activityID, r.userID, r.status, r.slotNo)
 }
 
 func insertLedger(db *sql.DB, orderNo int64, status int16, onConflict string) (sql.Result, error) {
@@ -48,6 +53,7 @@ func requireAffected(t *testing.T, res sql.Result, want int64) {
 
 func TestSeckillSchema_LedgerOneRowPerOrder(t *testing.T) {
 	db := migratedDB(t, "seckill")
+	seedSlots(t, db, 1, 1)
 	_, err := insertLedger(db, 1, ledgerLocked, "")
 	require.NoError(t, err)
 
@@ -63,6 +69,7 @@ func TestSeckillSchema_LedgerOneRowPerOrder(t *testing.T) {
 
 func TestSeckillSchema_LedgerStatus(t *testing.T) {
 	db := migratedDB(t, "seckill")
+	seedSlots(t, db, 1, 21)
 	for i, s := range []int16{ledgerLocked, ledgerSold, ledgerReleased} {
 		_, err := insertLedger(db, int64(10+i), s, "")
 		require.NoError(t, err, "status=%d must be accepted", s)

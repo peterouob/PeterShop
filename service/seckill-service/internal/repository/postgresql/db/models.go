@@ -6,14 +6,14 @@ package seckill
 
 import (
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type ActivityStock struct {
+type ActivitySlot struct {
 	ActivityID int64
-	Total      int32
-	Available  int32
-	Locked     int32
-	Sold       int32
+	SlotNo     int32
+	DisabledAt pgtype.Timestamptz
 }
 
 type Outbox struct {
@@ -42,6 +42,7 @@ type StockLedger struct {
 	Status     int16
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+	SlotNo     int32
 }
 
 type TccBarrier struct {

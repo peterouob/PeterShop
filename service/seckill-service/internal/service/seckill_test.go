@@ -38,7 +38,7 @@ func (f *fakeRepo) DeductStock(ctx context.Context, _ int64, _ string) error {
 	return f.deductErr
 }
 
-func (f *fakeRepo) Reserve(ctx context.Context, orderNo, _ int64, _ string) error {
+func (f *fakeRepo) Reserve(ctx context.Context, orderNo, _ int64, _ string, _ int32) error {
 	f.reserveCalled = true
 	f.reservedNo = orderNo
 	f.reserveCtxErr = ctx.Err()

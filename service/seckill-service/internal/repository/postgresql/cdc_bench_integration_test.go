@@ -229,7 +229,7 @@ func (b *cdcBench) releaseOrder(orderNo int64) {
 	require.EqualValues(b.t, 1, tag.RowsAffected())
 }
 
-func (b *cdcBench) seedActivity(activityID int64, productID string, price int64, stock int) {
+func (b *cdcBench) seedActivity(activityID int64, productID string, price int64, slots int) {
 	start := time.Now().Add(-time.Minute)
 	_, err := b.pool.Exec(b.ctx,
 		`INSERT INTO seckill_activity (activity_id, product_id, price, start_at, end_at, status, created_at, updated_at)
@@ -237,8 +237,8 @@ func (b *cdcBench) seedActivity(activityID int64, productID string, price int64,
 		activityID, productID, price, start, start.Add(time.Hour))
 	require.NoError(b.t, err)
 	_, err = b.pool.Exec(b.ctx,
-		`INSERT INTO activity_stock (activity_id, total, available, locked, sold) VALUES ($1, $2, $2, 0, 0)`,
-		activityID, stock)
+		`INSERT INTO activity_slot (activity_id, slot_no) SELECT $1, g FROM generate_series(1, $2::int) g`,
+		activityID, slots)
 	require.NoError(b.t, err)
 }
 

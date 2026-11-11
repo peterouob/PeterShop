@@ -12,7 +12,7 @@ import (
 
 type SeckillRepo interface {
 	DeductStock(ctx context.Context, activityID int64, userID string) error
-	Reserve(ctx context.Context, orderNo, activityID int64, userID string) error
+	Reserve(ctx context.Context, orderNo, activityID int64, userID string, slotNo int32) error
 }
 
 type seckillRepo struct {

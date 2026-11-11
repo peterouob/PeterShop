@@ -26,7 +26,7 @@ func TestCDC_ReserveReachesKafka(t *testing.T) {
 	b.seedActivity(1, "p1", 100, 10)
 	orderNo := int64(1)
 	before := time.Now().UnixMilli()
-	err := b.repo.Reserve(t.Context(), orderNo, 1, "uid1")
+	err := b.repo.Reserve(t.Context(), orderNo, 1, "uid1", 1)
 	require.NoError(t, err)
 	msgs := b.consume(1, 60*time.Second)
 	require.Len(t, msgs, 1)
@@ -41,7 +41,7 @@ func TestCDC_ResumesFromOffsetAfterDowntime(t *testing.T) {
 	before := time.Now().UnixMilli()
 	const orderA = int64(1)
 	keyA := strconv.FormatInt(orderA, 10)
-	err := b.repo.Reserve(t.Context(), orderA, 1, fmt.Sprintf("uid%d", orderA))
+	err := b.repo.Reserve(t.Context(), orderA, 1, fmt.Sprintf("uid%d", orderA), int32(orderA))
 	require.NoError(t, err)
 	first := b.consume(1, 60*time.Second)
 	require.Len(t, first, 1)
@@ -50,7 +50,7 @@ func TestCDC_ResumesFromOffsetAfterDowntime(t *testing.T) {
 	b.stopDebezium()
 
 	for orderNo := int64(2); orderNo <= 4; orderNo++ {
-		err := b.repo.Reserve(t.Context(), orderNo, 1, fmt.Sprintf("uid%d", orderNo))
+		err := b.repo.Reserve(t.Context(), orderNo, 1, fmt.Sprintf("uid%d", orderNo), int32(orderNo))
 		require.NoError(t, err)
 	}
 	b.restartDebezium()
@@ -78,7 +78,7 @@ func TestCDC_FailsLoudlyOnLostSlot(t *testing.T) {
 
 	reserve := func(orderNo int64) string {
 		t.Helper()
-		err := b.repo.Reserve(t.Context(), orderNo, 1, fmt.Sprintf("uid%d", orderNo))
+		err := b.repo.Reserve(t.Context(), orderNo, 1, fmt.Sprintf("uid%d", orderNo), int32(orderNo))
 		require.NoError(t, err)
 		return strconv.FormatInt(orderNo, 10)
 	}
@@ -134,8 +134,8 @@ func TestCDC_RolledBackReserveEmitsNothing(t *testing.T) {
 	b := newCDCBench(t)
 	b.seedActivity(1, "p1", 100, 1)
 
-	require.NoError(t, b.repo.Reserve(t.Context(), 1, 1, "uid1"))
-	require.ErrorIs(t, b.repo.Reserve(t.Context(), 2, 1, "uid2"), domain.ErrSoldOut)
+	require.NoError(t, b.repo.Reserve(t.Context(), 1, 1, "uid1", 1))
+	require.ErrorIs(t, b.repo.Reserve(t.Context(), 2, 1, "uid2", 1), domain.ErrSlotTaken)
 
 	counts := countByKey(b.consume(2, 10*time.Second))
 	require.Equal(t, 1, counts["1"], "the committed order must be delivered once")

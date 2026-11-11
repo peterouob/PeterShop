@@ -13,4 +13,7 @@ var (
 	ErrNotOpen         = &Error{"seckill activity is not open"}
 	ErrSealed          = &Error{"seckill activity is sealed"}
 	ErrAlreadyAdmitted = &Error{"user has already admitted in this activity"}
+	ErrSlotTaken       = &Error{"slot is held by another order"}
+	ErrSlotNotFound    = &Error{"slot does not exist"}
+	ErrSlotDisabled    = &Error{"slot is disabled"}
 )

@@ -68,7 +68,10 @@ func TestBarrier_BranchIDHoldsWhatCoordinatorHolds(t *testing.T) {
 	}
 }
 
-func TestHotInsertTablesHaveNoForeignKey(t *testing.T) {
+func TestHotInsertTablesForeignKeys(t *testing.T) {
+	allowed := map[string][]string{
+		"stock_ledger": {"fk_ledger_slot FOREIGN KEY (activity_id, slot_no) REFERENCES activity_slot(activity_id, slot_no) ON DELETE RESTRICT"},
+	}
 	cases := map[string][]string{
 		"seckill": {"stock_ledger", "tcc_barrier", "outbox"},
 		"order":   {"orders", "tcc_transaction", "tcc_branch"},
@@ -78,10 +81,18 @@ func TestHotInsertTablesHaveNoForeignKey(t *testing.T) {
 		t.Run(dir, func(t *testing.T) {
 			db := migratedDB(t, dir)
 			for _, table := range tables {
-				var n int
-				require.NoError(t, db.QueryRowContext(context.Background(),
-					`SELECT count(*) FROM pg_constraint WHERE conrelid = $1::regclass AND contype = 'f'`, table).Scan(&n))
-				require.Zero(t, n, "%s must not have a foreign key", table)
+				rows, err := db.QueryContext(context.Background(),
+					`SELECT conname || ' ' || pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = $1::regclass AND contype = 'f'`, table)
+				require.NoError(t, err)
+				var fks []string
+				for rows.Next() {
+					var fk string
+					require.NoError(t, rows.Scan(&fk))
+					fks = append(fks, fk)
+				}
+				require.NoError(t, rows.Err())
+				require.NoError(t, rows.Close())
+				require.ElementsMatch(t, allowed[table], fks, "%s has an unexpected foreign key", table)
 			}
 		})
 	}

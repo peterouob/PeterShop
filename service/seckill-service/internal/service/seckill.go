@@ -37,7 +37,7 @@ func (s *seckillService) Buy(ctx context.Context, activityID int64, userID strin
 	rCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reserveTimeout)
 	defer cancel()
 
-	if err := s.repo.Reserve(rCtx, orderID, activityID, userID); err != nil {
+	if err := s.repo.Reserve(rCtx, orderID, activityID, userID, 0); err != nil {
 		return 0, fmt.Errorf("seckill reserve order_id=%d user=%s: %w", orderID, userID, err)
 	}
 
