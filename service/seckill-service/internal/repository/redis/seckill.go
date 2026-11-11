@@ -50,22 +50,19 @@ func (r *StockRepo) DeductStock(ctx context.Context, activityID int64, userID st
 		return 0, fmt.Errorf("invalid slot %d", res[1])
 	}
 
-func (r *StockRepo) DeductStock(ctx context.Context, activityID int64, userID string) error {
-	keys := []string{rediskey.Meta(activityID), rediskey.Stock(activityID), rediskey.Users(activityID)}
-	code, err := buyScript.Run(ctx, r.redisClient, keys, userID).Int()
+	return int32(res[1]), nil
+}
+
+func (r *StockRepo) Release(ctx context.Context, aid int64, slotNo int32, userID string, removed bool) error {
+	keys := []string{rediskey.Slots(aid), rediskey.Users(aid), rediskey.Meta(aid)}
+	code, err := releaseScript.Run(ctx, r.redisClient, keys, slotNo, userID, removed).Int()
 	if err != nil {
 		return fmt.Errorf("redis script exec failed: %w", err)
 	}
 
-	return deductCode(code).Err()
-}
-
-func (r *StockRepo) Release(ctx context.Context, activityID int64, userID string) (int, error) {
-	keys := []string{rediskey.Stock(activityID), rediskey.Users(activityID)}
-	code, err := releaseScript.Run(ctx, r.redisClient, keys, userID).Int()
-	if err != nil {
-		return failedCode, fmt.Errorf("redis script exec failed: %w", err)
+	if code == deductStockLost {
+		return ErrStockLost
 	}
 
-	return code, nil
+	return nil
 }

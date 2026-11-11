@@ -82,8 +82,9 @@ func TestRestore_EmptyRedis(t *testing.T) {
 		"end_ms":   strconv.FormatInt(s.EndAt.UnixMilli(), 10),
 	}, meta, "an open activity has no sealed field")
 
-	assert.NoError(t, f.repo.DeductStock(f.ctx, rebuildAID, "u3"), "the rebuilt activity sells again")
-	assert.ErrorIs(t, f.repo.DeductStock(f.ctx, rebuildAID, "u1"), domain.ErrAlreadyAdmitted)
+	_, err = f.repo.DeductStock(f.ctx, rebuildAID, "u3")
+	assert.NoError(t, err, "the rebuilt activity sells again")
+	assert.ErrorIs(t, deductErr(f.repo.DeductStock(f.ctx, rebuildAID, "u1")), domain.ErrAlreadyAdmitted)
 }
 
 func TestRestore_OverwritesStaleState(t *testing.T) {
@@ -105,7 +106,8 @@ func TestRestore_NoUsersClearsSet(t *testing.T) {
 
 	assert.False(t, f.exists(rediskey.Users(rebuildAID)))
 	assert.EqualValues(t, 10, f.stock())
-	assert.NoError(t, f.repo.DeductStock(f.ctx, rebuildAID, "stale"))
+	_, err := f.repo.DeductStock(f.ctx, rebuildAID, "stale")
+	assert.NoError(t, err)
 }
 
 func TestRestore_IgnoresLeftoverScratch(t *testing.T) {
@@ -139,7 +141,7 @@ func TestRestore_SealedFromDB(t *testing.T) {
 
 	require.NoError(t, f.repo.Restore(f.ctx, s))
 
-	assert.ErrorIs(t, f.repo.DeductStock(f.ctx, rebuildAID, "u1"), domain.ErrSealed)
+	assert.ErrorIs(t, deductErr(f.repo.DeductStock(f.ctx, rebuildAID, "u1")), domain.ErrSealed)
 }
 
 func TestRestore_NeverUnseals(t *testing.T) {
@@ -148,7 +150,7 @@ func TestRestore_NeverUnseals(t *testing.T) {
 
 	require.NoError(t, f.repo.Restore(f.ctx, f.snap(10)))
 
-	assert.ErrorIs(t, f.repo.DeductStock(f.ctx, rebuildAID, "u1"), domain.ErrSealed)
+	assert.ErrorIs(t, deductErr(f.repo.DeductStock(f.ctx, rebuildAID, "u1")), domain.ErrSealed)
 }
 
 func TestSwapScript_MismatchTouchesNothing(t *testing.T) {

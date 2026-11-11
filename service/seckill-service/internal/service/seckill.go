@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -49,4 +50,56 @@ func (s *seckillService) Buy(ctx context.Context, activityID int64, userID strin
 	}
 
 	return orderID, nil
+}
+
+func (s *seckillService) compensationFor(ctx context.Context, activityID int64, userID string, slotNo int32, err error) {
+	returnSlot, removeUser := compensationPlan(err)
+	if !returnSlot && !removeUser {
+		return
+	}
+
+	if errors.Is(err, domain.ErrSlotNotFound) {
+		logger.Errorf(err, "seckill compensation slot_no=%d activity=%d user=%s ", slotNo, activityID, userID)
+	}
+
+	var slotArg int32
+	if returnSlot {
+		slotArg = slotNo
+	}
+
+	var lastErr error
+retry:
+	for attempt := range 3 {
+		err := s.repo.Release(ctx, activityID, slotArg, userID, removeUser)
+		if err == nil {
+			return
+		}
+		if errors.Is(err, redis.ErrStockLost) {
+			logger.Warn(fmt.Sprintf("release skipped: stock state lost, activity=%d user=%s", activityID, userID))
+			return
+		}
+		lastErr = err
+		select {
+		case <-ctx.Done():
+			break retry
+		case <-time.After(time.Duration(attempt+1) * 50 * time.Millisecond):
+		}
+	}
+
+	logger.Errorf(lastErr, "seckill compensation failed slot_no=%d activity=%d user=%s waiting for rebuild", slotArg, activityID, userID)
+}
+
+func compensationPlan(err error) (returnSlot, removeUser bool) {
+	switch {
+	case err == nil:
+		return false, false
+	case errors.Is(err, domain.ErrAlreadyBought):
+		return true, false
+	case errors.Is(err, domain.ErrSlotTaken),
+		errors.Is(err, domain.ErrSlotDisabled),
+		errors.Is(err, domain.ErrSlotNotFound):
+		return false, true
+	default:
+		return true, true
+	}
 }
