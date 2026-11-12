@@ -46,7 +46,7 @@ func TestBreaker_DBDownReturnsEverySlot(t *testing.T) {
 	require.False(t, isSuccessful(errInjected), "the injected fault must count as a breaker failure")
 	repo := &faultyRepo{
 		SeckillRepo: repository.NewSeckillRepo(rdb, pool),
-		plan:        func(string) fault { return faultCrash },
+		plan:        func(string) fault { return faultDBDown },
 	}
 	var seq int64
 	svc := &seckillService{
@@ -67,7 +67,7 @@ func TestBreaker_DBDownReturnsEverySlot(t *testing.T) {
 		assert.ErrorIs(t, err, domain.ErrUnavailable)
 	}
 
-	assert.EqualValues(t, tripAfterFailures, repo.crashes.Load(), "only pre-trip calls may reach the db")
+	assert.EqualValues(t, tripAfterFailures, repo.dbDowns.Load(), "only pre-trip calls may reach the db")
 
 	after, err := rdb.SMembers(ctx, rediskey.Slots(aid)).Result()
 	require.NoError(t, err)

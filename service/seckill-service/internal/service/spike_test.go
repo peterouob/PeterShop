@@ -103,8 +103,7 @@ func runWinners(t *testing.T, b *bench, aid int64, stock, buyers int) {
 	t.Logf("wall=%v throughput=%.0f orders/s", wall, float64(won)/wall.Seconds())
 
 	s := b.snapshot(aid)
-	assertInvariants(t, stock, s, results)
-	assertDBLedger(t, s)
+	b.assertSafety(aid, stock, s, results)
 	t.Logf("undersold by reserve timeouts: %d (redis deducted %d, ledger %d)",
 		(stock-s.redisStock)-len(s.ledger), stock-s.redisStock, len(s.ledger))
 	assert.GreaterOrEqual(t, len(s.ledger), won, "every reported win must be in the ledger")

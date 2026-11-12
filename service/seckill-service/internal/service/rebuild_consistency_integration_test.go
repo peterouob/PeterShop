@@ -27,7 +27,7 @@ func TestConsistency_RebuildAfterRedisLoss(t *testing.T) {
 	require.ErrorIs(t, err, domain.ErrNotPreheated, "with Redis gone the sale stops instead of selling blind")
 
 	require.NoError(t, repository.NewRebuilder(b.rdb, b.pool).Rebuild(b.ctx, aid))
-	assertRebuilt(t, b.snapshot(aid))
+	b.assertRebuilt(aid)
 
 	again := b.buyAll(userIDs(buyers), aid)
 	for _, r := range again {
@@ -39,9 +39,9 @@ func TestConsistency_RebuildAfterRedisLoss(t *testing.T) {
 	}
 
 	s := b.snapshot(aid)
-	assertInvariants(t, stock, s, append(append(first, again...), fresh...))
-	assertDBLedger(t, s)
+	b.assertSafety(aid, stock, s, append(append(first, again...), fresh...))
 	assert.Len(t, s.ledger, buyers+20)
+	b.assertSlots(aid, stock, 0)
 }
 
 func TestConsistency_RebuildDuringSale(t *testing.T) {
@@ -67,11 +67,11 @@ func TestConsistency_RebuildDuringSale(t *testing.T) {
 	require.Positive(t, rebuilds)
 
 	s := b.snapshot(aid)
-	assertSafety(t, stock, s, results)
-	assertDBLedger(t, s)
+	b.assertSafety(aid, stock, s, results)
 
 	require.NoError(t, rb.Rebuild(b.ctx, aid))
-	assertRebuilt(t, b.snapshot(aid))
+	b.assertRebuilt(aid)
+	b.assertSlots(aid, stock, 0)
 }
 
 func TestConsistency_ConcurrentRebuilds(t *testing.T) {
@@ -112,11 +112,11 @@ func TestConsistency_ConcurrentRebuilds(t *testing.T) {
 	require.Positive(t, ok.Load()+mismatched.Load())
 
 	s := b.snapshot(aid)
-	assertSafety(t, stock, s, results)
-	assertDBLedger(t, s)
+	b.assertSafety(aid, stock, s, results)
 
 	require.NoError(t, rb.Rebuild(b.ctx, aid))
-	assertRebuilt(t, b.snapshot(aid))
+	b.assertRebuilt(aid)
+	b.assertSlots(aid, stock, 0)
 }
 
 func TestConsistency_RebuildFreesCrashedBuyers(t *testing.T) {
@@ -136,14 +136,16 @@ func TestConsistency_RebuildFreesCrashedBuyers(t *testing.T) {
 	require.Len(t, crashed, crashes, "every crash maps to one planned user")
 
 	before := b.snapshot(aid)
-	require.Zero(t, before.redisStock, "redis handed out every token")
-	require.Equal(t, crashes, before.dbAvailable, "crashed tokens are lost: db still holds them while redis is empty")
+	require.Zero(t, before.redisStock, "redis handed out every slot")
+	require.Equal(t, crashes, before.dbAvailable, "crashed slots are free in db but gone from redis")
+	b.assertSlots(aid, stock, crashes)
 
 	stuck := b.buyAll(crashed, aid)
 	require.Equal(t, len(crashed), countErrs(stuck, domain.ErrAlreadyAdmitted), "crashed buyers are stuck as admitted without an order")
 
 	require.NoError(t, repository.NewRebuilder(b.rdb, b.pool).Rebuild(b.ctx, aid))
-	assertRebuilt(t, b.snapshot(aid))
+	b.assertRebuilt(aid)
+	b.assertSlots(aid, stock, 0)
 
 	b.repo.plan = func(string) fault { return faultNone }
 	retry := b.buyAll(crashed, aid)
@@ -152,10 +154,10 @@ func TestConsistency_RebuildFreesCrashedBuyers(t *testing.T) {
 	}
 
 	s := b.snapshot(aid)
-	assert.Len(t, s.ledger, stock, "lost tokens recovered: every unit is sold")
+	assert.Len(t, s.ledger, stock, "lost slots recovered: every unit is sold")
 	assert.Zero(t, s.dbAvailable, "no undersell after recovery")
-	assertInvariants(t, stock, s, append(append(first, stuck...), retry...))
-	assertDBLedger(t, s)
+	b.assertSafety(aid, stock, s, append(append(first, stuck...), retry...))
+	b.assertSlots(aid, stock, 0)
 }
 
 func TestConsistency_StockKeyLostStopsSale(t *testing.T) {
@@ -170,13 +172,12 @@ func TestConsistency_StockKeyLostStopsSale(t *testing.T) {
 
 	_, err := b.svc.Buy(b.ctx, aid, "late")
 	require.ErrorIs(t, err, redisrepo.ErrStockLost, "a missing stock key stops the sale instead of reading as sold out or unlimited")
-	var ledgerRows int
-	require.NoError(t, b.pool.QueryRow(b.ctx,
-		`SELECT count(*) FROM stock_ledger WHERE activity_id = $1`, aid).Scan(&ledgerRows))
-	require.Equal(t, early, ledgerRows, "a lost stock key must not reach the db")
+	require.Len(t, b.snapshot(aid).ledger, early, "a lost stock key must not reach the db")
+	require.Equal(t, stock-early, b.slotSets(aid).lost(stock), "every free slot vanished with the key")
 
 	require.NoError(t, repository.NewRebuilder(b.rdb, b.pool).Rebuild(b.ctx, aid))
-	assertRebuilt(t, b.snapshot(aid))
+	b.assertRebuilt(aid)
+	b.assertSlots(aid, stock, 0)
 
 	fresh := b.buyAll(userIDsFrom(early, stock-early), aid)
 	for _, r := range fresh {
@@ -185,6 +186,6 @@ func TestConsistency_StockKeyLostStopsSale(t *testing.T) {
 
 	s := b.snapshot(aid)
 	assert.Len(t, s.ledger, stock, "every unit sold exactly once across the key loss")
-	assertInvariants(t, stock, s, append(first, fresh...))
-	assertDBLedger(t, s)
+	b.assertSafety(aid, stock, s, append(first, fresh...))
+	b.assertSlots(aid, stock, 0)
 }
