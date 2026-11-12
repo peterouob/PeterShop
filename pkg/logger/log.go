@@ -83,6 +83,10 @@ func Warn(msg any) {
 	getLogger().Warn(fmt.Sprint(msg))
 }
 
+func Warnf(format string, args ...any) {
+	getLogger().Warn(fmt.Sprintf(format, args...))
+}
+
 func Error(msg string, err error, fields ...zap.Field) {
 	getLogger().Error(msg, append(fields, zap.Error(err))...)
 }
