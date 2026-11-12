@@ -24,7 +24,7 @@ type Gate[T any] struct {
 	maxProbes uint64
 }
 
-func NewGate[T any](st gobreaker.Settings) (*Gate[T], error) {
+func NewGate[T any](st gobreaker.Settings) *Gate[T] {
 	if st.MaxRequests == 0 || uint64(st.MaxRequests) > probeMask {
 		logger.Warnf("invalid the max request auto adjustment %d", st.MaxRequests)
 		st.MaxRequests = 1
@@ -40,7 +40,11 @@ func NewGate[T any](st gobreaker.Settings) (*Gate[T], error) {
 		}
 	}
 	g.cb = gobreaker.NewCircuitBreaker[T](st)
-	return g, nil
+	return g
+}
+
+func (g *Gate[T]) Breaker() *gobreaker.CircuitBreaker[T] {
+	return g.cb
 }
 
 func (g *Gate[T]) Admit() (p Permit[T], ok bool) {
