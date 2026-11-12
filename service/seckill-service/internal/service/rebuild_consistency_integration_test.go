@@ -21,7 +21,7 @@ func TestConsistency_RebuildAfterRedisLoss(t *testing.T) {
 	const aid, stock, buyers = 1, 100, 50
 	b := newBench(t, aid, stock, nil)
 	first := b.buyAll(userIDs(buyers), aid)
-	require.NoError(t, b.rdb.Del(b.ctx, rediskey.Meta(aid), rediskey.Stock(aid), rediskey.Users(aid)).Err())
+	require.NoError(t, b.rdb.Del(b.ctx, rediskey.Meta(aid), rediskey.Slots(aid), rediskey.Users(aid)).Err())
 
 	_, err := b.svc.Buy(b.ctx, aid, "late")
 	require.ErrorIs(t, err, domain.ErrNotPreheated, "with Redis gone the sale stops instead of selling blind")
@@ -166,7 +166,7 @@ func TestConsistency_StockKeyLostStopsSale(t *testing.T) {
 	for _, r := range first {
 		require.NoError(t, r.err)
 	}
-	require.NoError(t, b.rdb.Del(b.ctx, rediskey.Stock(aid)).Err())
+	require.NoError(t, b.rdb.Del(b.ctx, rediskey.Slots(aid)).Err())
 
 	_, err := b.svc.Buy(b.ctx, aid, "late")
 	require.ErrorIs(t, err, redisrepo.ErrStockLost, "a missing stock key stops the sale instead of reading as sold out or unlimited")

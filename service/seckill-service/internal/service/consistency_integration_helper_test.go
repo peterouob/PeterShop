@@ -140,7 +140,11 @@ func (b *bench) seedRedis(aid int64, stock int) {
 		"start_ms": redisNow.Add(-time.Hour).UnixMilli(),
 		"end_ms":   redisNow.Add(time.Hour).UnixMilli(),
 	}).Err())
-	require.NoError(b.t, b.rdb.Set(b.ctx, rediskey.Stock(aid), stock, 0).Err())
+	slots := make([]any, stock)
+	for i := range slots {
+		slots[i] = i + 1
+	}
+	require.NoError(b.t, b.rdb.SAdd(b.ctx, rediskey.Slots(aid), slots...).Err())
 }
 
 type outcome struct {
@@ -184,12 +188,12 @@ func (b *bench) snapshot(aid int64) snapshot {
 		ledger:     map[string]int64{},
 	}
 
-	stock, err := b.rdb.Get(b.ctx, rediskey.Stock(aid)).Int()
+	stock, err := b.rdb.SCard(b.ctx, rediskey.Slots(aid)).Result()
 	if err != nil {
 		b.t.Fatalf("failed to get stock from redis: %v", err)
 	}
 
-	s.redisStock = stock
+	s.redisStock = int(stock)
 
 	members, err := b.rdb.SMembers(b.ctx, rediskey.Users(aid)).Result()
 	if err != nil {

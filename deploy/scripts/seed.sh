@@ -23,9 +23,9 @@ psql_seckill -v aid="$AID" -v stock="$STOCK" <<'SQL'
 INSERT INTO seckill_activity (activity_id, product_id, price, start_at, end_at, status, created_at, updated_at)
 VALUES (:aid, 'demo-product', 100, now() - interval '1 hour', now() + interval '1 day', 2, now(), now())
 ON CONFLICT (activity_id) DO UPDATE SET start_at = EXCLUDED.start_at, end_at = EXCLUDED.end_at;
-INSERT INTO activity_stock (activity_id, total, available, locked, sold)
-VALUES (:aid, :stock, :stock, 0, 0)
-ON CONFLICT (activity_id) DO NOTHING;
+INSERT INTO activity_slot (activity_id, slot_no)
+SELECT :aid, g FROM generate_series(1, :stock) g
+ON CONFLICT (activity_id, slot_no) DO NOTHING;
 SQL
 
 forward postgres "$PG_LOCAL" 5432
@@ -35,5 +35,5 @@ PGHOST=127.0.0.1 PGPORT="$PG_LOCAL" PGUSER=svc_seckill PGPASSWORD="${PGPASSWORD_
 REDIS_ADDR="127.0.0.1:$REDIS_LOCAL" \
   go run ./service/seckill-service/cmd/rebuild --activity "$AID"
 
-echo "activity $AID: db=$(psql_seckill -tAc "SELECT available FROM activity_stock WHERE activity_id = $AID")" \
-     "redis=$(redis GET "seckill:{$AID}:stock")"
+echo "activity $AID: db_slots=$(psql_seckill -tAc "SELECT count(*) FROM activity_slot WHERE activity_id = $AID AND disabled_at IS NULL")" \
+     "redis_free=$(redis SCARD "seckill:{$AID}:slots")"
