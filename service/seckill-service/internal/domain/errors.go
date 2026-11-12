@@ -16,4 +16,5 @@ var (
 	ErrSlotTaken       = &Error{"slot is held by another order"}
 	ErrSlotNotFound    = &Error{"slot does not exist"}
 	ErrSlotDisabled    = &Error{"slot is disabled"}
+	ErrUnavailable     = &Error{"seckill is temporarily unavailable"}
 )

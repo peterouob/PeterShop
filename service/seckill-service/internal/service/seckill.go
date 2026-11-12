@@ -6,14 +6,21 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/peterouob/seckill_service/pkg/circuit"
 	"github.com/peterouob/seckill_service/pkg/idgenerate"
 	"github.com/peterouob/seckill_service/pkg/logger"
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/domain"
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/repository"
 	"github.com/peterouob/seckill_service/service/seckill-service/internal/repository/redis"
+	"github.com/sony/gobreaker/v2"
 )
 
-const reserveTimeout = 3 * time.Second
+const (
+	reserveTimeout     = 3 * time.Second
+	breakerOpenTimeout = 5 * time.Second
+	breakerProbes      = 3
+	tripAfterFailures  = 5
+)
 
 type SeckillService interface {
 	Buy(ctx context.Context, activityID int64, userID string) (int64, error)
@@ -22,13 +29,43 @@ type SeckillService interface {
 type seckillService struct {
 	repo   repository.SeckillRepo
 	nextID func() (int64, error)
+	cb     *circuit.Gate[struct{}]
+
+	reserveTimeout time.Duration
 }
 
 func NewSeckillService(repo repository.SeckillRepo, sf *idgenerate.Snowflake) (SeckillService, error) {
-	return &seckillService{repo: repo, nextID: sf.Next}, nil
+	return &seckillService{
+		repo:           repo,
+		nextID:         sf.Next,
+		cb:             newReserveGate(breakerOpenTimeout),
+		reserveTimeout: reserveTimeout,
+	}, nil
+}
+
+func newReserveGate(openTimeout time.Duration) *circuit.Gate[struct{}] {
+	return circuit.NewGate[struct{}](gobreaker.Settings{
+		Name:        "seckill-reserve",
+		MaxRequests: breakerProbes,
+		Timeout:     openTimeout,
+		ReadyToTrip: func(c gobreaker.Counts) bool {
+			return c.ConsecutiveFailures >= tripAfterFailures
+		},
+		IsSuccessful: isSuccessful,
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			logger.Warnf("the %s service circuit breaker state from %s to %s", name, from.String(), to.String())
+		},
+	})
 }
 
 func (s *seckillService) Buy(ctx context.Context, activityID int64, userID string) (int64, error) {
+	permit, ok := s.cb.Admit()
+	if !ok {
+		return 0, fmt.Errorf("circuit breaker not allow: %w", domain.ErrUnavailable)
+	}
+
+	defer permit.Release()
+
 	orderID, err := s.nextID()
 	if err != nil {
 		return 0, fmt.Errorf("error for next id: %w", err)
@@ -39,14 +76,18 @@ func (s *seckillService) Buy(ctx context.Context, activityID int64, userID strin
 		return 0, fmt.Errorf("seckill buy activity=%d user=%s: %w", activityID, userID, err)
 	}
 
-	rCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reserveTimeout)
+	rCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.reserveTimeout)
 	defer cancel()
 
-	if err := s.repo.Reserve(rCtx, orderID, activityID, userID, slotNo); err != nil {
+	permit.MarkUsed()
+
+	if _, err := s.cb.Breaker().Execute(func() (struct{}, error) {
+		return struct{}{}, s.repo.Reserve(rCtx, orderID, activityID, userID, slotNo)
+	}); err != nil {
 		cCtx, cancel := context.WithTimeout(context.WithoutCancel(rCtx), 10*time.Second)
 		defer cancel()
 		s.compensationFor(cCtx, activityID, userID, slotNo, err)
-		return 0, fmt.Errorf("seckill reserve order_id=%d user=%s: %w", orderID, userID, err)
+		return 0, fmt.Errorf("seckill reserve order_id=%d user=%s: %w", orderID, userID, reserveErr(err))
 	}
 
 	return orderID, nil
@@ -102,4 +143,20 @@ func compensationPlan(err error) (returnSlot, removeUser bool) {
 	default:
 		return true, true
 	}
+}
+
+func reserveErr(err error) error {
+	if errors.Is(err, gobreaker.ErrOpenState) || errors.Is(err, gobreaker.ErrTooManyRequests) {
+		return fmt.Errorf("%w, domain err : %w", err, domain.ErrUnavailable)
+	}
+
+	return err
+}
+
+func isSuccessful(err error) bool {
+	if err != nil {
+		_, ok := errors.AsType[*domain.Error](err)
+		return ok
+	}
+	return true
 }

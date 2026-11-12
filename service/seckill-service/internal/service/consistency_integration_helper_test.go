@@ -111,7 +111,7 @@ func newBench(t *testing.T, aid int64, stock int, plan func(string) fault) *benc
 
 	repo := &faultyRepo{SeckillRepo: repository.NewSeckillRepo(rdb, pool), plan: plan}
 	var seq atomic.Int64
-	svc := &seckillService{repo: repo, nextID: func() (int64, error) { return seq.Add(1), nil }}
+	svc := &seckillService{repo: repo, nextID: func() (int64, error) { return seq.Add(1), nil }, cb: newReserveGate(testOpenTimeout), reserveTimeout: reserveTimeout}
 
 	b := &bench{t: t, ctx: ctx, rdb: rdb, pool: pool, repo: repo, svc: svc}
 	b.addActivity(aid, stock)

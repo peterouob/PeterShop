@@ -59,6 +59,8 @@ func toStatus(err error) error {
 		return status.Error(codes.Aborted, "the slot has been taken please try again later")
 	case errors.Is(err, domain.ErrSlotDisabled):
 		return status.Error(codes.Aborted, "the slot has been disabled please try again later")
+	case errors.Is(err, domain.ErrUnavailable):
+		return status.Error(codes.Unavailable, "service is busy, please try again later")
 	case errors.Is(err, domain.ErrSlotNotFound):
 		logger.Errorf(err, "seckill: slot not found and redis not the same of db")
 		return status.Error(codes.Aborted, "the slot not found please try again later")
