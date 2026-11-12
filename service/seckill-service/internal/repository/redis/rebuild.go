@@ -21,6 +21,7 @@ var swapScript = redis.NewScript(swapSrc)
 
 const (
 	rebuildBatch     = 1000
+	scratchTTL       = 10 * time.Minute
 	swapMismatchCode = "REBUILD_TMP_MISMATCH"
 )
 
@@ -31,22 +32,15 @@ func (r *StockRepo) Restore(ctx context.Context, snap domain.ActivitySnapshot) e
 		return err
 	}
 
-	scratch := fmt.Sprintf("%s:%016x", rediskey.UsersRebuild(snap.ActivityID), rand.Uint64())
+	aid := snap.ActivityID
+	suffix := fmt.Sprintf(":%016x", rand.Uint64())
+	usersTmp := rediskey.UsersRebuild(aid) + suffix
+	slotsTmp := rediskey.SlotsRebuild(aid) + suffix
 
-	if len(snap.Users) > 0 {
+	if len(snap.Users) > 0 || len(snap.Slots) > 0 {
 		if _, err := r.redisClient.Pipelined(ctx, func(p redis.Pipeliner) error {
-			for lo := 0; lo < len(snap.Users); lo += rebuildBatch {
-				hi := min(lo+rebuildBatch, len(snap.Users))
-				members := make([]any, hi-lo)
-				for i, uid := range snap.Users[lo:hi] {
-					members[i] = uid
-				}
-
-				p.SAdd(ctx, scratch, members...)
-				if lo == 0 {
-					p.PExpire(ctx, scratch, 10*time.Minute)
-				}
-			}
+			fillScratch(ctx, p, usersTmp, snap.Users)
+			fillScratch(ctx, p, slotsTmp, snap.Slots)
 			return nil
 		}); err != nil {
 			return err
@@ -58,15 +52,9 @@ func (r *StockRepo) Restore(ctx context.Context, snap domain.ActivitySnapshot) e
 		sealed = "1"
 	}
 
-	keys := []string{
-		rediskey.Users(snap.ActivityID),
-		scratch,
-		rediskey.Stock(snap.ActivityID),
-		rediskey.Meta(snap.ActivityID),
-	}
-
-	if err := swapScript.Run(ctx, r.redisClient, keys, snap.Available, snap.StartAt.UnixMilli(),
-		snap.EndAt.UnixMilli(), len(snap.Users), sealed).Err(); err != nil {
+	keys := []string{rediskey.Users(aid), usersTmp, rediskey.Slots(aid), slotsTmp, rediskey.Meta(aid)}
+	if err := swapScript.Run(ctx, r.redisClient, keys, snap.StartAt.UnixMilli(), snap.EndAt.UnixMilli(),
+		len(snap.Users), len(snap.Slots), sealed).Err(); err != nil {
 		if strings.Contains(err.Error(), swapMismatchCode) {
 			return fmt.Errorf("swap script mismatch: %w, %w", err, ErrRebuildMismatch)
 		}
@@ -76,17 +64,34 @@ func (r *StockRepo) Restore(ctx context.Context, snap domain.ActivitySnapshot) e
 	return nil
 }
 
-func validSnapShot(snapShot domain.ActivitySnapshot) error {
-	if snapShot.Available < 0 {
-		return fmt.Errorf("negative available %d", snapShot.Available)
-	}
+func fillScratch[T any](ctx context.Context, p redis.Pipeliner, key string, vals []T) {
+	for lo := 0; lo < len(vals); lo += rebuildBatch {
+		hi := min(lo+rebuildBatch, len(vals))
+		members := make([]any, hi-lo)
+		for i, v := range vals[lo:hi] {
+			members[i] = v
+		}
 
+		p.SAdd(ctx, key, members...)
+		if lo == 0 {
+			p.PExpire(ctx, key, scratchTTL)
+		}
+	}
+}
+
+func validSnapShot(snapShot domain.ActivitySnapshot) error {
 	if snapShot.StartAt.IsZero() || snapShot.EndAt.IsZero() {
 		return errors.New("zero start/end time")
 	}
 
 	if !snapShot.StartAt.Before(snapShot.EndAt) {
 		return errors.New("start time must be earlier than end time")
+	}
+
+	for _, s := range snapShot.Slots {
+		if s <= 0 {
+			return fmt.Errorf("non-positive slot %d", s)
+		}
 	}
 
 	return nil
