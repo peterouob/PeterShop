@@ -44,7 +44,7 @@ if not slot then
     if redis.call('HGET', meta_key, 'drained') == '1' then
         return { BUY_STATE.SOLD_OUT, 0 }
     end
-    return {BUY_STATE.STOCK_LOST, 0}
+    return { BUY_STATE.STOCK_LOST, 0 }
 end
 
 if redis.call('EXISTS', slots_key) == 0 then
