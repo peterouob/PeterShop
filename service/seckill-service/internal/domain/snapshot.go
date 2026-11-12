@@ -7,7 +7,7 @@ type ActivitySnapshot struct {
 	StartAt    time.Time
 	EndAt      time.Time
 	Sealed     bool
-	Available  int64
+	Slots      []int32
 	Users      []string
 }
 

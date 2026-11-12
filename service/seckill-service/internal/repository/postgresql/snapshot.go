@@ -38,7 +38,7 @@ func (r *SnapshotRepo) LoadSnapshot(ctx context.Context, activityID int64) (doma
 		StartAt:    row.StartAt,
 		EndAt:      row.EndAt,
 		Sealed:     row.Status >= 3,
-		Available:  int64(row.Available),
+		Slots:      row.FreeSlots,
 		Users:      row.UserIds,
 	}, nil
 }

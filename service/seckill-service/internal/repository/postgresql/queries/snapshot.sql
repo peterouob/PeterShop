@@ -4,7 +4,7 @@ SELECT
     a.end_at,
     a.status,
     c.slot_total,
-    c.available,
+    c.free_slots,
     COALESCE(
         (SELECT array_agg(l.user_id)
          FROM stock_ledger l
@@ -15,10 +15,12 @@ FROM seckill_activity a
 CROSS JOIN LATERAL (
     SELECT
         count(*)::int as slot_total,
-        count(*) FILTER (
-            WHERE sl.disabled_at is null
-            and l.slot_no is null
-        )::int as available
+        COALESCE(
+            array_agg(sl.slot_no ORDER BY sl.slot_no) FILTER (
+                WHERE sl.disabled_at IS NULL
+                AND l.slot_no IS NULL),
+        '{}'
+        )::int[] AS free_slots
     from activity_slot sl
     left join stock_ledger l
         on l.activity_id = sl.activity_id

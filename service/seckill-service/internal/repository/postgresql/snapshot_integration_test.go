@@ -18,19 +18,22 @@ func (f *reserveFixture) window(aid int64) (start, end time.Time) {
 	return start, end
 }
 
-func TestLoadSnapshot_ActivityStockAndEveryLedgerUser(t *testing.T) {
+func TestLoadSnapshot_FreeSlotsAndEveryLedgerUser(t *testing.T) {
 	f := newReserveFixture(t)
 	f.activity(1, "p1", 100)
-	f.slots(1, 10)
+	f.slots(1, 6)
 	f.activity(2, "p2", 100)
-	f.slots(2, 10)
-	for i, uid := range []string{"u1", "u2", "u3"} {
-		require.NoError(t, f.repo.Reserve(f.ctx, int64(i+1), 1, uid, int32(i+1)))
-	}
-	require.NoError(t, f.repo.Reserve(f.ctx, 9, 2, "other-activity", 1))
-	// u2 timed out and was released: still in the ledger, so uk_ledger_activity_user still blocks a rebuy.
-	f.exec(`UPDATE stock_ledger SET status = 3 WHERE order_no = 2`)
-	f.exec(`UPDATE activity_stock SET available = available + 1, locked = locked - 1 WHERE activity_id = 1`)
+	f.slots(2, 6)
+	require.NoError(t, f.repo.Reserve(f.ctx, 1, 1, "locked", 1))
+	require.NoError(t, f.repo.Reserve(f.ctx, 2, 1, "sold", 2))
+	f.exec(`UPDATE stock_ledger SET status = 2 WHERE order_no = 2`)
+	require.NoError(t, f.repo.Reserve(f.ctx, 3, 1, "released", 3))
+	f.release(3)
+	require.NoError(t, f.repo.Reserve(f.ctx, 4, 1, "released-then-taken", 4))
+	f.release(4)
+	require.NoError(t, f.repo.Reserve(f.ctx, 5, 1, "taker", 4))
+	f.disableSlot(1, 5)
+	require.NoError(t, f.repo.Reserve(f.ctx, 9, 2, "other-activity", 6))
 
 	snap, err := NewSnapshotRepo(f.pool).LoadSnapshot(f.ctx, 1)
 
@@ -39,8 +42,9 @@ func TestLoadSnapshot_ActivityStockAndEveryLedgerUser(t *testing.T) {
 	assert.EqualValues(t, 1, snap.ActivityID)
 	assert.True(t, start.Equal(snap.StartAt), "start_at %v != %v", start, snap.StartAt)
 	assert.True(t, end.Equal(snap.EndAt), "end_at %v != %v", end, snap.EndAt)
-	assert.EqualValues(t, 8, snap.Available)
-	assert.ElementsMatch(t, []string{"u1", "u2", "u3"}, snap.Users)
+	assert.Equal(t, []int32{3, 6}, snap.Slots, "ordered; no disabled, no actively held slot; a slot whose only row is RELEASED is free")
+	assert.ElementsMatch(t, []string{"locked", "sold", "released", "released-then-taken", "taker"}, snap.Users,
+		"a RELEASED user still blocks a rebuy")
 	assert.False(t, snap.Sealed)
 }
 
@@ -53,7 +57,30 @@ func TestLoadSnapshot_NoWinners(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, snap.Users)
-	assert.EqualValues(t, 10, snap.Available)
+	assert.Equal(t, []int32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, snap.Slots)
+}
+
+func TestLoadSnapshot_NoFreeSlotsIsEmptyNotNull(t *testing.T) {
+	f := newReserveFixture(t)
+	f.activity(1, "p1", 100)
+	f.slots(1, 2)
+	require.NoError(t, f.repo.Reserve(f.ctx, 1, 1, "u1", 1))
+	f.disableSlot(1, 2)
+
+	snap, err := NewSnapshotRepo(f.pool).LoadSnapshot(f.ctx, 1)
+
+	require.NoError(t, err)
+	assert.NotNil(t, snap.Slots, "'{}' scans to an empty slice, NULL would scan to nil")
+	assert.Empty(t, snap.Slots)
+}
+
+func TestLoadSnapshot_NoSlotRowsIsAnError(t *testing.T) {
+	f := newReserveFixture(t)
+	f.activity(1, "p1", 100)
+
+	_, err := NewSnapshotRepo(f.pool).LoadSnapshot(f.ctx, 1)
+
+	require.ErrorContains(t, err, "no slots row")
 }
 
 func TestLoadSnapshot_ClosedActivityIsSealed(t *testing.T) {
